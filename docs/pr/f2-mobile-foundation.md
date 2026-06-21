@@ -1,12 +1,12 @@
 # F2 Mobile Foundation — T068-NX + T068.2 + T068.3
 
-> **Status:** pronto para review. Branch `feature/f2-mobile` em `ee14d19` · 19 commits · 59/59 testes · coverage 86.66% lines · 11 test files.
+> **Status:** pronto para review. Branch `feature/f2-mobile` em `c12e20f` · 20 commits · 59/59 testes · coverage 86.66% lines · 11 test files.
 
 ## Summary
 
 - **App do motorista (move-app)** completo: 5 telas navegáveis, auth OTP mock, outbox-resilient design pronto para F2.10.
 - **Cobertura de testes ≥80%** nas 4 telas críticas (Comprovante, DetalheEntrega, HomeMotorista, MapaRota) — 59/59 passing.
-- **Preview mode** (`?preview=screen=NAME`) para screenshots E2E + demo rápido sem precisar de auth real.
+- **Preview mode** (`?preview=NAME`) para screenshots E2E + demo rápido sem precisar de auth real.
 
 ## O que entra
 
@@ -65,16 +65,16 @@ Para validar localmente:
 cd apps/scorpius-move-app
 pnpm install
 pnpm start --web --port 8081
-# Abrir http://localhost:8081/?preview=screen=home
+# Abrir http://localhost:8081/?preview=home
 ```
 
-- [ ] **Login com WhatsApp (mock auth):** `http://localhost:8081/?preview=screen=login` → form com WhatsApp input
-- [ ] **HomeMotorista lista 3 entregas mock:** `?preview=screen=home` → 3 cards (Mercado Central, Farmácia Paulista, Hospital Norte)
+- [ ] **Login com WhatsApp (mock auth):** `http://localhost:8081/?preview=login` → form com WhatsApp input
+- [ ] **HomeMotorista lista 3 entregas mock:** `?preview=home` → 3 cards (Mercado Central, Farmácia Paulista, Hospital Norte)
 - [ ] **DetalheEntrega mostra dados + navega:** tap em qualquer card → tela com cliente/endereço/itens
-- [ ] **MapaRota renderiza com map mock:** `?preview=screen=mapa` → OpenStreetMap tile + origem/destino + distância
-- [ ] **Comprovante tira foto mock:** `?preview=screen=comprovante` → tap "Capturar foto" toggle visual
-- [ ] **PerfilMotorista logout com confirmação:** `?preview=screen=perfil` → tap "Sair" → Alert com 2 botões
-- [ ] **Preview mode bypassa auth:** qualquer `?preview=screen=NAME` mostra a tela sem precisar de OTP
+- [ ] **MapaRota renderiza com map mock:** `?preview=mapa` → OpenStreetMap tile + origem/destino + distância
+- [ ] **Comprovante tira foto mock:** `?preview=comprovante` → tap "Capturar foto" toggle visual
+- [ ] **PerfilMotorista logout com confirmação:** `?preview=perfil` → tap "Sair" → Alert com 2 botões
+- [ ] **Preview mode bypassa auth:** qualquer `?preview=NAME` mostra a tela sem precisar de OTP
 - [ ] **Dark/Light toggle persiste:** toggle no header → persiste em localStorage entre reloads
 - [ ] **i18n pt-BR:** todos os textos em português (Brasil)
 - [ ] **Filtros funcionam:** HomeMotorista chips "Pendente" / "Em rota" / "Entregue" reduzem a lista
@@ -92,7 +92,7 @@ pnpm start --web --port 8081
 - **Tema:** dark default + light, segue `system`, persiste em `localStorage` (Expo Web)
 - **API URL:** configurável via `EXPO_PUBLIC_API_URL` (default `https://staging.hub.portalscorpiustecnologia.com.br/api/v1`)
 - **Mock data:** 3 entregas hardcoded em `src/mocks/deliveries.ts` — substitui gradualmente por `/driver/deliveries` (T072) conforme Vulcan entrega os endpoints
-- **Preview mode:** força uma tela específica via `?preview=screen=NAME` para screenshots/E2E. Em produção este caminho é no-op (params da URL não confiáveis).
+- **Preview mode:** força uma tela específica via `?preview=NAME` para screenshots/E2E. Em produção este caminho é no-op (params da URL não confiáveis).
 
 ## Pendências (próximos PRs)
 

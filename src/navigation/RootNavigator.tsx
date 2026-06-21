@@ -5,9 +5,18 @@
  * quando deslogado, AppStack quando autenticado. Inclui estado de
  * loading (bootstrap inicial) com splash nativo.
  *
- * **Modo preview (?preview=screen=NAME):** força uma tela específica
+ * **Modo preview (?preview=NAME):** força uma tela específica
  * sem precisar de login real. Usado em screenshots/E2E. Em produção
  * este caminho é no-op (params da URL não confiáveis).
+ *
+ * Valores aceitos: `login | otp | home | detalhe | mapa | comprovante | perfil`.
+ *
+ * **ATENÇÃO:** a URL é `?preview=NAME`, NÃO `?preview=screen=NAME` ou
+ * `?preview=NAME&...` seguido de `=`. `URLSearchParams.get('preview')`
+ * retorna tudo até o próximo `&`, então `?preview=screen=home` faz o
+ * valor ser a string literal `"screen=home"`, que não bate com nenhum
+ * screen válido e cai no fallback (AuthStack → LoginScreen). Use sempre
+ * `?preview=home` (e similares).
  */
 import { useEffect, useMemo } from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
@@ -56,6 +65,10 @@ function readPreviewFromUrl(): PreviewScreen | null {
   // parciais.
   if (typeof window === 'undefined' || !window.location) return null;
   const params = new URLSearchParams(window.location.search);
+  // ATENÇÃO: get('preview') retorna o valor cru até o próximo '&'. Se a
+  // URL for `?preview=screen=home` o retorno é a string literal
+  // 'screen=home', que não está em `valid` e cai no fallback Login.
+  // Formato correto: `?preview=home` (e similares).
   const v = params.get('preview');
   const valid: PreviewScreen[] = ['login', 'otp', 'home', 'detalhe', 'mapa', 'comprovante', 'perfil'];
   return valid.includes((v ?? '') as PreviewScreen) ? (v as PreviewScreen) : null;
