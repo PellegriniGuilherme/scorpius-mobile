@@ -16,6 +16,7 @@ import { requestOtp } from '@/api/auth';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
 import type { AuthStackParamList } from '@/navigation/types';
+import { validateWhatsappInput } from './LoginScreen.validation';
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
@@ -27,7 +28,7 @@ export function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const trimmed = phone.replace(/\D/g, '');
-  const isValid = trimmed.length >= 12; // E.164: +55 + DDD + 9 digits
+  const isValid = validateWhatsappInput(phone);
 
   async function handleSubmit() {
     if (!isValid) {
