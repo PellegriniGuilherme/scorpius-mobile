@@ -15,6 +15,7 @@ import { useAuthStore } from '@/store/auth';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
 import type { AuthStackParamList } from '@/navigation/types';
+import { isValidOtpCode } from './OtpScreen.validation';
 
 type Nav = RouteProp<AuthStackParamList, 'Otp'>;
 
@@ -43,12 +44,8 @@ export function OtpScreen() {
 
   const phone = route.params?.phone ?? '';
 
-  function isValidCode(s: string): boolean {
-    return /^\d{6}$/.test(s);
-  }
-
   async function handleSubmit() {
-    if (!isValidCode(code)) {
+    if (!isValidOtpCode(code)) {
       setError(ptBR.otp.errorInvalidCode);
       return;
     }
@@ -104,7 +101,7 @@ export function OtpScreen() {
             label={submitting ? ptBR.otp.submitting : ptBR.otp.submit}
             onPress={handleSubmit}
             loading={submitting}
-            disabled={!isValidCode(code)}
+            disabled={!isValidOtpCode(code)}
             fullWidth
           />
           <Button
