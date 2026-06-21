@@ -41,6 +41,7 @@ module.exports = {
     'src/store/auth.ts',
     'src/services/OutboxService.ts',
     'src/services/SyncWorker.ts',
+    'src/services/NotificationsService.ts',
   ],
   coverageThreshold: {
     global: {

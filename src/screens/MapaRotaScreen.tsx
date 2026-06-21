@@ -1,4 +1,21 @@
-import { Linking, ScrollView, Text, View, Image } from 'react-native';
+/**
+ * Scorpius Move — MapaRotaScreen (T080: Google Maps).
+ *
+ * Decisão Guilherme 12:06: Mapa = Google Maps (NÃO OpenStreetMap).
+ * Usa `react-native-maps` com `provider={PROVIDER_GOOGLE}`.
+ *
+ * API key: `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` em runtime via
+ * `Constants.expoConfig.extra.googleMapsApiKey`. Sem key, cai
+ * para placeholder visual com aviso (UX não quebra).
+ *
+ * expo-location é chamado para ACCESS_FINE_LOCATION no mount,
+ * exibindo a posição atual do motorista no mapa.
+ */
+import { useEffect, useState } from 'react';
+import { Linking, ScrollView, Text, View } from 'react-native';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Location from 'expo-location';
+import Constants from 'expo-constants';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -23,10 +40,37 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 
 const ORIGIN = { lat: -23.5613, lng: -46.6565, label: 'Hub Scorpius — Av. Paulista' };
 
+function getApiKey(): string {
+  const extra = (Constants.expoConfig?.extra ?? {}) as { googleMapsApiKey?: string };
+  return extra.googleMapsApiKey ?? '';
+}
+
 export function MapaRotaScreen() {
   const route = useRoute<Route_>();
   const { colors, tokens } = useTheme();
   const delivery = findDelivery(route.params.deliveryId);
+  const apiKey = getApiKey();
+  const hasGoogleMaps = apiKey.length > 0;
+
+  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!hasGoogleMaps) return; // Não pedir permission se não vai usar o mapa real
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          setLocationError('Permissão de localização negada');
+          return;
+        }
+        const pos = await Location.getCurrentPositionAsync({});
+        setCurrentLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+      } catch (err) {
+        setLocationError(err instanceof Error ? err.message : 'Erro ao obter localização');
+      }
+    })();
+  }, [hasGoogleMaps]);
 
   if (!delivery) {
     return (
@@ -39,7 +83,6 @@ export function MapaRotaScreen() {
   const dest = delivery.address;
   const km = haversineKm(ORIGIN.lat, ORIGIN.lng, dest.lat, dest.lng);
   const min = Math.max(5, Math.round((km / 30) * 60));
-  const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${dest.lng - 0.01},${dest.lat - 0.005},${dest.lng + 0.01},${dest.lat + 0.005}&layer=mapnik&marker=${dest.lat},${dest.lng}`;
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
@@ -48,6 +91,7 @@ export function MapaRotaScreen() {
           {ptBR.map.title}
         </Text>
 
+        {/* Mapa: Google Maps real se API key presente, OSM fallback caso contrário */}
         <View
           style={{
             height: 240,
@@ -58,9 +102,61 @@ export function MapaRotaScreen() {
             overflow: 'hidden',
           }}
         >
-          <Image source={{ uri: mapUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+          {hasGoogleMaps ? (
+            <MapView
+              provider={PROVIDER_GOOGLE}
+              testID="map"
+              style={{ width: '100%', height: '100%' }}
+              initialRegion={{
+                latitude: dest.lat,
+                longitude: dest.lng,
+                latitudeDelta: 0.05,
+                longitudeDelta: 0.05,
+              }}
+            >
+              <Marker
+                testID="marker-origin"
+                coordinate={{ latitude: ORIGIN.lat, longitude: ORIGIN.lng }}
+                title={ORIGIN.label}
+                pinColor="blue"
+              />
+              <Marker
+                testID="marker-dest"
+                coordinate={{ latitude: dest.lat, longitude: dest.lng }}
+                title={`${dest.street}, ${dest.number}`}
+                pinColor="red"
+              />
+              {currentLocation && (
+                <Marker
+                  testID="marker-current"
+                  coordinate={currentLocation}
+                  title="Você está aqui"
+                  pinColor="green"
+                />
+              )}
+              <Polyline
+                testID="polyline"
+                coordinates={[
+                  { latitude: ORIGIN.lat, longitude: ORIGIN.lng },
+                  { latitude: dest.lat, longitude: dest.lng },
+                ]}
+                strokeColor={colors.accent}
+                strokeWidth={3}
+              />
+            </MapView>
+          ) : (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: tokens.space[4] }}>
+              <Text style={{ color: colors.statusDangerText, fontWeight: tokens.weight.semibold, textAlign: 'center' }}>
+                ⚠️ Google Maps API key não configurada
+              </Text>
+              <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm, textAlign: 'center', marginTop: tokens.space[2] }}>
+                Defina EXPO_PUBLIC_GOOGLE_MAPS_API_KEY em .env
+              </Text>
+            </View>
+          )}
         </View>
 
+        {/* Info card: origem → destino */}
         <Card>
           <View style={{ gap: tokens.space[3] }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[2] }}>
@@ -86,9 +182,15 @@ export function MapaRotaScreen() {
                 </Text>
               </View>
             </View>
+            {locationError && (
+              <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs, fontStyle: 'italic' }}>
+                📍 {locationError}
+              </Text>
+            )}
           </View>
         </Card>
 
+        {/* Distance + Duration */}
         <Card>
           <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
             <View style={{ alignItems: 'center', gap: tokens.space[1] }}>
@@ -106,8 +208,9 @@ export function MapaRotaScreen() {
           </View>
         </Card>
 
+        {/* Open external (Google Maps directions) */}
         <Button
-          label={ptBR.map.openExternal}
+          label="Abrir no Google Maps"
           variant="secondary"
           fullWidth
           onPress={() => {

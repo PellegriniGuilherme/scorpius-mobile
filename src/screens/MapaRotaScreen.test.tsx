@@ -1,17 +1,19 @@
 /**
- * Scorpius Move — MapaRotaScreen tests (T068.3).
+ * Scorpius Move — MapaRotaScreen tests (T068.3 + T080).
  *
- * Cobre:
- *  - render com deliveryId param
- *  - mostra origem/destino/distância/duração
- *  - tap "Abrir no Google Maps" chama Linking.openURL
- *  - estado "Entrega não encontrada" para id inválido
- *  - exibe Image com URL do OpenStreetMap
+ * T068.3: testes com OpenStreetMap placeholder.
+ * T080: atualizados para Google Maps + PROVIDER_GOOGLE.
+ *  - API key configurada: renderiza MapView com markers + polyline
+ *  - Sem API key: fallback com aviso
+ *  - Tap "Abrir no Google Maps" chama Linking.openURL
+ *  - Distance/duration cards visíveis
+ *  - Origin + destination labels
  */
 import { renderWithTheme, fireEvent, screen } from '@/../jest.test-utils';
 import { MapaRotaScreen } from './MapaRotaScreen';
 import { Linking } from 'react-native';
 import { useRoute } from '@react-navigation/native';
+import Constants from 'expo-constants';
 
 jest.mock('@react-navigation/native', () => {
   const mockReal = jest.requireActual('@react-navigation/native');
@@ -32,17 +34,23 @@ function setRouteParams(params: { deliveryId: number } | undefined) {
   });
 }
 
-describe('MapaRotaScreen', () => {
+describe('MapaRotaScreen (T080: Google Maps)', () => {
   beforeEach(() => {
     openURLSpy.mockClear();
+    // Default: API key presente
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (Constants.expoConfig as any) = { extra: { googleMapsApiKey: 'test-key' } };
+  });
+
+  afterAll(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (Constants.expoConfig as any) = { extra: {} };
   });
 
   it('renders mapa with origin and destination', () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<MapaRotaScreen />);
-    // Origem: 'Hub Scorpius — Av. Paulista'
     expect(screen.getByText(/Hub Scorpius/i)).toBeTruthy();
-    // Destino: 'Av. Paulista, 1500' (SC-1001)
     expect(screen.getByText('Av. Paulista, 1500')).toBeTruthy();
   });
 
@@ -52,34 +60,39 @@ describe('MapaRotaScreen', () => {
     expect(screen.getByText('Entrega não encontrada.')).toBeTruthy();
   });
 
-  it('renders OpenStreetMap image with destination coordinates', () => {
+  it('renders Google Maps MapView with markers (when API key configured)', () => {
     setRouteParams({ deliveryId: 1001 });
     const { toJSON } = renderWithTheme(<MapaRotaScreen />);
-    // Verifica que há uma Image com source.uri (os mocks de Image do
-    // react-native mantêm props.source na serialização).
+    // MapView, Marker origin, Marker dest, Polyline são renderizados
     const tree = JSON.stringify(toJSON());
-    expect(tree).toContain('openstreetmap.org');
-    expect(tree).toContain('-23.5613'); // lat destino
+    expect(tree).toContain('MapView');
+    expect(tree).toContain('marker-origin');
+    expect(tree).toContain('marker-dest');
+    expect(tree).toContain('polyline');
   });
 
-  it('opens Google Maps with destination when "Abrir no app de mapas" pressed', () => {
+  it('falls back to placeholder when API key absent', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (Constants.expoConfig as any) = { extra: { googleMapsApiKey: '' } };
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<MapaRotaScreen />);
-    // ptBR.map.openExternal = 'Abrir no app de mapas'
-    const btn = screen.getByText(/Abrir no app/i);
+    expect(screen.getByText(/Google Maps API key não configurada/i)).toBeTruthy();
+  });
+
+  it('opens Google Maps with destination when button pressed', () => {
+    setRouteParams({ deliveryId: 1001 });
+    renderWithTheme(<MapaRotaScreen />);
+    const btn = screen.getByText('Abrir no Google Maps');
     fireEvent.press(btn);
     expect(openURLSpy).toHaveBeenCalledTimes(1);
     const url = openURLSpy.mock.calls[0][0] as string;
     expect(url).toContain('google.com/maps');
-    expect(url).toContain('-23.5613'); // lat destino SC-1001
+    expect(url).toContain('-23.5613');
   });
 
   it('shows distance and duration cards', () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<MapaRotaScreen />);
-    // ptBR.map.distance e ptBR.map.duration têm placeholders {km}/{min}.
-    // Após substituição: distância (km) e estimativa (min). Verifica que
-    // os labels "distância" e "estimativa" estão presentes.
     expect(screen.getByText('distância')).toBeTruthy();
     expect(screen.getByText('estimativa')).toBeTruthy();
   });
