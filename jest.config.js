@@ -39,6 +39,8 @@ module.exports = {
     'src/components/Card.tsx',
     'src/components/Input.tsx',
     'src/store/auth.ts',
+    'src/services/OutboxService.ts',
+    'src/services/SyncWorker.ts',
   ],
   coverageThreshold: {
     global: {
