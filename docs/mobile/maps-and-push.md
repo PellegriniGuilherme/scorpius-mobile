@@ -7,6 +7,42 @@
 - **Mapa:** Google Maps (NÃO OpenStreetMap, NÃO Mapbox)
 - **Push:** Expo Push (NÃO polling HTTP, NÃO Reverb)
 
+## ⚠️ API Key Rotation (T091 R1)
+
+A Google Maps API key `AIzaSy…74ZU` vazou no git history em
+`524e707` (corrigido em `40559d2` com placeholder). Por
+segurança, recomenda-se rotacionar a key no Google Cloud Console
+e atualizar `.env` + `app.config.ts` (KEY_IOS + KEY_ANDROID).
+
+Procedimento:
+
+1. Google Cloud Console → APIs & Services → Credentials
+2. Delete `AIzaSy…74ZU` (e suas variantes iOS/Android)
+3. Create new API key + restrict by bundleId `com.scorpius.move`
+   - iOS: `bundleId = com.scorpius.move`
+   - Android: SHA-1 do signing key (gerado por `expo credentials:manager`)
+4. Update `.env`:
+   - `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=<nova>`
+   - `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS=<nova_ios>` (se diferente)
+   - `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID=<nova_android>` (se diferente)
+5. Commit separado: `chore(move-app): rotate google maps api key (security)`
+6. (Opcional) Force push / git history rewrite se a chave é muito
+   sensível — decisão de Guilherme.
+
+**Risco se não rotacionar:** qualquer pessoa com acesso ao repo
+pode usar a chave até Guilherme revogar no Console. Como `EXPO_PUBLIC_*`
+vai no bundle JS de qualquer jeito, isso não é um vazamento "secreto"
+— mas restringir por bundleId já é defesa em profundidade.
+
+**Por que já não está restrita por bundleId:** a chave original foi
+criada em outro projeto (mdt-expo) com bundleIds diferentes. Quando
+T082 criou o bundleId `com.scorpius.move` em `app.config.ts`, a
+restrição antiga não bate. Se tentar usar a chave antiga em
+com.scorpius.move, vai dar "API key not authorized" no device
+real. Rotação + nova restrição corrigem.
+
+## Google Maps Setup
+
 ## Google Maps Setup
 
 ### API Key (onde conseguir)
