@@ -10,7 +10,9 @@
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
-    "test": "echo 'move-app usa jest (a configurar em T068.2)' && exit 0",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
     "dev:mobile": "expo start --tunnel",
     "eas:build:dev": "eas build --profile development --platform android --local"
   },
