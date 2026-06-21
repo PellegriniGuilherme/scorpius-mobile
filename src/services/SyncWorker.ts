@@ -48,6 +48,17 @@ import { outbox as defaultOutbox, type OutboxItem, type OutboxService } from './
 const BACKOFF_SECONDS = [30, 60, 120, 300, 600] as const;
 const MAX_ATTEMPTS = BACKOFF_SECONDS.length; // 5
 
+/**
+ * T091 S3: jitter exponencial para evitar thundering herd.
+ * Multiplicador entre [0.5, 1.5) — 50% mais cedo ou mais tarde.
+ * Sem jitter, múltiplos items falhando juntos tentariam retry no
+ * mesmo instante, causando pico de carga no backend.
+ */
+function jitteredBackoff(baseSeconds: number): number {
+  const jitter = 0.5 + Math.random(); // [0.5, 1.5)
+  return Math.round(baseSeconds * jitter);
+}
+
 export interface ProofUploadPayload {
   deliveryId: number;
   photoPath: string;
@@ -149,10 +160,11 @@ export class SyncWorker {
     if (!this.api) {
       // Sem client: tenta de novo em 30s. Evita marcar como failed
       // se a app ainda está bootando.
+      const backoffMs = jitteredBackoff(30) * 1000;
       await this.outboxSvc.markFailed(
         item.id,
         'api client not configured',
-        Date.now() + 30_000,
+        Date.now() + backoffMs,
       );
       return;
     }

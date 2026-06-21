@@ -86,9 +86,10 @@ describe('SyncWorker', () => {
     const item = items.find((i) => i.id === id);
     expect(item?.attempts).toBe(1);
     expect(item?.last_error).toBe('network');
-    // Backoff: primeira tentativa usa 30s
-    const expectedRetry = item!.updated_at + 30_000;
-    expect(item?.next_retry_at).toBe(expectedRetry);
+    // T091 S3: backoff 30s ± 50% jitter → [15s, 45s]
+    const backoffMs = item!.next_retry_at - item!.updated_at;
+    expect(backoffMs).toBeGreaterThanOrEqual(15_000);
+    expect(backoffMs).toBeLessThanOrEqual(45_000);
   });
 
   it('backoff doubles on subsequent failures', async () => {
@@ -96,15 +97,16 @@ describe('SyncWorker', () => {
     const api: ApiClient = { uploadProof: jest.fn().mockRejectedValue(new Error('net')) };
     worker.setApiClient(api);
 
-    // 1ª falha: 30s após a falha (item.attempts=0, BACKOFF[0])
+    // 1ª falha: 30s ± 50% jitter (item.attempts=0, BACKOFF[0])
     await worker.tick();
     let items = await outbox.getAll();
     let item = items.find((i) => i.id === id);
     expect(item?.attempts).toBe(1);
-    expect(item!.next_retry_at - item!.updated_at).toBe(30_000);
+    const b1 = item!.next_retry_at - item!.updated_at;
+    expect(b1).toBeGreaterThanOrEqual(15_000); // 30 * 0.5
+    expect(b1).toBeLessThanOrEqual(45_000); // 30 * 1.5
 
-    // Força ready alterando next_retry_at para 0 (via SQL direto no mock)
-    // sem bump de attempts. Hack: atribuição direta na row.
+    // Força ready alterando next_retry_at para 0 sem bump de attempts.
     const db = (outbox as unknown as { db: { tables: Map<string, unknown[]> } }).db;
     if (db?.tables) {
       const rows = db.tables.get('outbox') as Array<Record<string, unknown>>;
@@ -117,11 +119,13 @@ describe('SyncWorker', () => {
     await worker.tick();
     items = await outbox.getAll();
     item = items.find((i) => i.id === id);
-    // 2ª falha: 60s (item.attempts=1, BACKOFF[1])
+    // 2ª falha: 60s ± 50% jitter (item.attempts=1, BACKOFF[1])
     expect(item?.attempts).toBe(2);
-    expect(item!.next_retry_at - item!.updated_at).toBe(60_000);
+    const b2 = item!.next_retry_at - item!.updated_at;
+    expect(b2).toBeGreaterThanOrEqual(30_000); // 60 * 0.5
+    expect(b2).toBeLessThanOrEqual(90_000); // 60 * 1.5
 
-    // 3ª: 120s
+    // 3ª: 120s ± 50% jitter
     if (db?.tables) {
       const rows = db.tables.get('outbox') as Array<Record<string, unknown>>;
       if (rows) {
@@ -134,7 +138,9 @@ describe('SyncWorker', () => {
     items = await outbox.getAll();
     item = items.find((i) => i.id === id);
     expect(item?.attempts).toBe(3);
-    expect(item!.next_retry_at - item!.updated_at).toBe(120_000);
+    const b3 = item!.next_retry_at - item!.updated_at;
+    expect(b3).toBeGreaterThanOrEqual(60_000); // 120 * 0.5
+    expect(b3).toBeLessThanOrEqual(180_000); // 120 * 1.5
   });
 
   it('after MAX_ATTEMPTS (5) failures, item goes to DLQ (next_retry_at = 0)', async () => {
@@ -158,7 +164,55 @@ describe('SyncWorker', () => {
     expect(item?.last_error).toContain('fatal');
   });
 
-  it('tick() without api client configured → markFailed with 30s backoff', async () => {
+  // T091 S3: jitter 50% — múltiplos items falhando juntos NÃO devem
+  // tentar retry no mesmo instante (thundering herd). Valida que
+  // retries espalham em janela >1s após 5 simulações.
+  it('jitter espalha retries em janela >1s (evita thundering herd)', async () => {
+    // Mock Math.random para ser determinístico.
+    // Cada chamada de jitteredBackoff() faz Math.random() uma vez.
+    // Com Math.random() retornando 0.5, 0.625, 0.75, 0.875, 1.0,
+    // os multiplicadores são 1.0, 1.125, 1.25, 1.375, 1.5 → backoffs
+    // de 30s, 33.75s, 37.5s, 41.25s, 45s (variação total = 15s).
+    const randSpy = jest.spyOn(Math, 'random');
+    const multipliers = [0.5, 0.625, 0.75, 0.875, 1.0];
+    let callIdx = 0;
+    randSpy.mockImplementation(() => {
+      const v = multipliers[callIdx] ?? 0.5;
+      callIdx += 1;
+      return v;
+    });
+
+    try {
+      // Cada item: enqueue + tick (falha) + capturar backoff
+      const backoffs: number[] = [];
+      const baseBackoffSec = 30;
+      for (let i = 0; i < multipliers.length; i++) {
+        // Math.random() em jitteredBackoff() é o `multipliers[i]`.
+        // jitter = 0.5 + multipliers[i]; backoffMs = baseBackoffSec * jitter * 1000
+        const jitter = 0.5 + multipliers[i];
+        const expectedMs = baseBackoffSec * jitter * 1000;
+        const id = await outbox.enqueue('proof_upload', { deliveryId: 1001 + i });
+        // Sem apiClient configurado → markFailed com jitter
+        await worker.tick();
+        const items = await outbox.getAll();
+        const item = items.find((it) => it.id === id);
+        expect(item).toBeTruthy();
+        backoffs.push(item!.next_retry_at - item!.updated_at);
+        // Verifica que cada backoff é próximo do esperado (±500ms jitter
+        // interno: Math.round arredonda 37.5 → 38 → 38000 vs esperado 37500)
+        expect(backoffs[i]).toBeGreaterThanOrEqual(expectedMs - 500);
+        expect(backoffs[i]).toBeLessThanOrEqual(expectedMs + 500);
+      }
+      // Janela total = max - min deve ser > 1000ms (1s)
+      const min = Math.min(...backoffs);
+      const max = Math.max(...backoffs);
+      expect(max - min).toBeGreaterThan(1000);
+    } finally {
+      randSpy.mockRestore();
+    }
+  });
+
+  it('tick() without api client configured → markFailed with backoff (15-45s com jitter)', async () => {
     const id = await outbox.enqueue('proof_upload', { deliveryId: 1001 });
     // NÃO setar apiClient
     await worker.tick();
@@ -166,8 +220,10 @@ describe('SyncWorker', () => {
     const item = items.find((i) => i.id === id);
     expect(item?.attempts).toBe(1);
     expect(item?.last_error).toContain('api client not configured');
-    const expectedRetry = item!.updated_at + 30_000;
-    expect(item?.next_retry_at).toBe(expectedRetry);
+    // T091 S3: jitter 50% — backoff é 30s ± 50% → entre 15s e 45s
+    const backoffMs = item!.next_retry_at - item!.updated_at;
+    expect(backoffMs).toBeGreaterThanOrEqual(15_000);
+    expect(backoffMs).toBeLessThanOrEqual(45_000);
   });
 
   it('tick() with unknown type discards item (markDone)', async () => {
