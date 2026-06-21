@@ -4,14 +4,14 @@
  * API:
  *   const { colors, mode, setMode } = useTheme();
  *
- * O modo `system` espelha `useColorScheme()` do React Native (re-hookable,
- * atualiza em runtime quando o SO muda de esquema).
+ * O modo `system` espelha `Appearance.getColorScheme()` do SO e atualiza
+ * em runtime (via `Appearance.addChangeListener`).
  *
  * Tokens (spacing/radius/typography) vêm de `./tokens` e não mudam
  * com o tema — só `colors` muda.
  */
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
-import { useColorScheme } from 'react-native';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Appearance } from 'react-native';
 import { tokens } from './tokens';
 import { darkPalette, lightPalette, type Theme, type ThemeMode } from './palette';
 
@@ -26,7 +26,7 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const systemScheme = useColorScheme();
+  const systemScheme = Appearance.getColorScheme();
   const [modePreference, setModePreference] = useState<ThemeMode>('system');
 
   // Resolve o modo efetivo ('light' | 'dark') a partir da preferência.
@@ -36,6 +36,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
     return modePreference;
   }, [modePreference, systemScheme]);
+
+  // Listener de mudança de esquema do sistema (apenas relevante em mode=system).
+  useEffect(() => {
+    if (modePreference !== 'system') return;
+    const sub = Appearance.addChangeListener(({ colorScheme }) => {
+      // Force re-render via state update
+      setModePreference('system');
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modePreference]);
 
   const value = useMemo<ThemeContextValue>(() => {
     const colors = effectiveMode === 'light' ? lightPalette : darkPalette;
