@@ -81,3 +81,89 @@ jest.mock('@react-navigation/native-stack', () => ({
     Group: PassthroughNavigator,
   }),
 }));
+
+// --- Mocks de libs nativas (T068.3) ---
+// Estas libs não são importadas nos testes atuais, mas mocks preventivos
+// cobrem o que F2.10 (outbox foto + push) e outbox sync vão usar. Manter
+// antes de precisarmos evita gambiarras depois.
+
+// react-native-maps: MapView, Marker, Polyline, etc. Stub como View com
+// testID para asserts em testes futuros. Variável prefixada com `mock`
+// para passar a regra do jest.mock (out-of-scope). `virtual: true` para
+// módulos não instalados (F2.10 vai adicionar como dep).
+const mockReact = jest.requireActual('react');
+const mockReactCreateElement = mockReact.createElement;
+
+jest.mock(
+  'react-native-maps',
+  () => ({
+    __esModule: true,
+    default: (props: { testID?: string; children?: unknown }) =>
+      mockReactCreateElement('MapView', { testID: props.testID ?? 'map' }, props.children),
+    MapView: (props: { testID?: string; children?: unknown }) =>
+      mockReactCreateElement('MapView', { testID: props.testID ?? 'map' }, props.children),
+    Marker: (props: { testID?: string }) =>
+      mockReactCreateElement('Marker', { testID: props.testID ?? 'marker' }),
+    Polyline: (props: { testID?: string }) =>
+      mockReactCreateElement('Polyline', { testID: props.testID ?? 'polyline' }),
+    PROVIDER_GOOGLE: 'google',
+  }),
+  { virtual: true }
+);
+
+// expo-camera: CameraView stub + métodos de permission.
+jest.mock(
+  'expo-camera',
+  () => ({
+    CameraView: (props: { testID?: string; children?: unknown }) =>
+      mockReactCreateElement('CameraView', { testID: props.testID ?? 'camera-view' }, props.children),
+    useCameraPermissions: () => [{ granted: true }, jest.fn()],
+    requestCameraPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }),
+  }),
+  { virtual: true }
+);
+
+// expo-image-picker: launchCameraAsync/launchImageLibraryAsync.
+jest.mock(
+  'expo-image-picker',
+  () => ({
+    launchCameraAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
+    launchImageLibraryAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
+    MediaTypeOptions: { Images: 'Images' },
+  }),
+  { virtual: true }
+);
+
+// expo-haptics: no-op para testes.
+jest.mock(
+  'expo-haptics',
+  () => ({
+    impactAsync: jest.fn().mockResolvedValue(undefined),
+    notificationAsync: jest.fn().mockResolvedValue(undefined),
+    selectionAsync: jest.fn().mockResolvedValue(undefined),
+    ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  }),
+  { virtual: true }
+);
+
+// expo-location: requestForegroundPermissionsAsync mock.
+jest.mock(
+  'expo-location',
+  () => ({
+    requestForegroundPermissionsAsync: jest.fn().mockResolvedValue({ granted: true, status: 'granted' }),
+    getCurrentPositionAsync: jest.fn().mockResolvedValue({ coords: { latitude: -23.5613, longitude: -46.6565 } }),
+    Accuracy: { High: 'high' },
+  }),
+  { virtual: true }
+);
+
+// expo-linking: openURL mock (com spy).
+jest.mock(
+  'expo-linking',
+  () => ({
+    openURL: jest.fn().mockResolvedValue(true),
+    canOpenURL: jest.fn().mockResolvedValue(true),
+    createURL: jest.fn((path: string) => `scorpiusmove://${path}`),
+  }),
+  { virtual: true }
+);
