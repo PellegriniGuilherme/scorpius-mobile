@@ -14,6 +14,9 @@ import type { ExpoConfig, ConfigContext } from 'expo/config';
  *  - `experiments.typedRoutes: true` para type-safety de rotas.
  *  - T080: lê API keys de `process.env` (definidos em `.env`).
  *    `.env` é gitignored — chaves reais NÃO vão para o repo.
+ *  - T082: EAS project ID fixo criado em 2026-06-21 (`eas init`).
+ *    Bundle IDs internacional `com.scorpius.move` (decisão Guilherme 12:26).
+ *    Google Maps config iOS/Android com chaves separadas.
  */
 const config: ExpoConfig = {
   name: 'Scorpius Move',
@@ -29,8 +32,12 @@ const config: ExpoConfig = {
   },
   ios: {
     supportsTablet: true,
-    // T082: atualizado para 'br.com.scorpius.move' (production namespace)
-    bundleIdentifier: 'br.com.scorpius.move',
+    // T082: bundle id internacional (decisão Guilherme 12:26)
+    bundleIdentifier: 'com.scorpius.move',
+    // T082: Google Maps API key iOS nativo (mesma do mdt-expo — reaproveitada)
+    config: {
+      googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS ?? '',
+    },
     infoPlist: {
       LSApplicationQueriesSchemes: ['whatsapp'],
       // T080: Push notifications + Location (Google Maps nearby)
@@ -43,8 +50,14 @@ const config: ExpoConfig = {
     },
   },
   android: {
-    // T082: atualizado para 'br.com.scorpius.move' (production namespace)
-    package: 'br.com.scorpius.move',
+    // T082: bundle id internacional (decisão Guilherme 12:26)
+    package: 'com.scorpius.move',
+    // T082: Google Maps API key Android nativo
+    config: {
+      googleMaps: {
+        apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID ?? '',
+      },
+    },
     adaptiveIcon: {
       backgroundColor: '#0b1220',
     },
@@ -77,11 +90,13 @@ const config: ExpoConfig = {
   },
   // `extra` é injetado em runtime via Constants.expoConfig.extra.
   // eas.json (per-profile) sobrescreve apiUrl no build nativo.
-  // T080: eas.projectId para NotificationsService.getExpoPushTokenAsync.
+  // T082: EAS project ID fixo criado via `eas init` em 2026-06-21.
   extra: {
     apiUrl: process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000/api/v1',
     eas: {
-      projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? '',
+      // T082: project ID fixo (gerado por `eas init` em 2026-06-21).
+      // O fallback em .env permite override local; em produção o ID é o fixo.
+      projectId: '4c02a514-a933-4599-9625-5152b1b05ab5',
     },
     googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '',
   },
