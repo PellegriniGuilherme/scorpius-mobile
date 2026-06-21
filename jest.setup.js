@@ -123,16 +123,13 @@ jest.mock(
   { virtual: true }
 );
 
-// expo-image-picker: launchCameraAsync/launchImageLibraryAsync.
-jest.mock(
-  'expo-image-picker',
-  () => ({
-    launchCameraAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
-    launchImageLibraryAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
-    MediaTypeOptions: { Images: 'Images' },
-  }),
-  { virtual: true }
-);
+// expo-image-picker: launchCameraAsync/launchImageLibraryAsync (T068.5 — instalado)
+// Default: cancelado. Tests podem override via jest.spyOn.
+jest.mock('expo-image-picker', () => ({
+  launchCameraAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
+  launchImageLibraryAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
+  MediaTypeOptions: { Images: 'Images' },
+}));
 
 // expo-haptics: no-op para testes.
 jest.mock(
@@ -167,3 +164,33 @@ jest.mock(
   }),
   { virtual: true }
 );
+
+// --- expo-sqlite: mock in-memory (T068.5 — instalado).
+// Implementa subset da API: openDatabaseAsync, execAsync, prepareAsync,
+// statement.executeAsync / finalizeAsync / getAllAsync.
+import * as mockSqlite from './jest.sqlite-mock.js';
+jest.mock('expo-sqlite', () => mockSqlite);
+
+// --- expo-file-system: mock minimalista (T068.5 — instalado).
+jest.mock('expo-file-system', () => ({
+  Paths: { cache: { uri: 'file:///cache/' } },
+  Directory: jest.fn().mockImplementation((uri: string) => ({
+    uri,
+    create: jest.fn().mockResolvedValue(undefined),
+  })),
+  File: jest.fn().mockImplementation((uri: string) => ({
+    uri,
+    copy: jest.fn().mockResolvedValue(undefined),
+  })),
+}));
+
+// --- @react-native-community/netinfo: mock (T068.5 — instalado).
+jest.mock('@react-native-community/netinfo', () => ({
+  __esModule: true,
+  default: {
+    fetch: jest.fn().mockResolvedValue({ isConnected: true }),
+    addEventListener: jest.fn().mockReturnValue(() => undefined),
+  },
+  fetch: jest.fn().mockResolvedValue({ isConnected: true }),
+  addEventListener: jest.fn().mockReturnValue(() => undefined),
+}));

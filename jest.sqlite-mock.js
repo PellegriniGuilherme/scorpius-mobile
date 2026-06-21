@@ -1,0 +1,308 @@
+// Mock in-memory de expo-sqlite para jest (T068.5).
+// Implementa subset da API usada por OutboxService.
+
+class MockStatement {
+  constructor(sql, db) {
+    this.sql = sql.trim();
+    this.db = db;
+    this.params = [];
+  }
+
+  executeAsync(params = []) {
+    this.params = params;
+    return this.db.execute(this.sql, this.params);
+  }
+
+  finalizeAsync() {
+    return Promise.resolve();
+  }
+}
+
+class MockDatabase {
+  constructor() {
+    this.tables = new Map();
+    this.nextId = 1;
+  }
+
+  execAsync(source) {
+    for (const raw of source.split(';')) {
+      const stmt = raw.trim();
+      if (!stmt) continue;
+      const upper = stmt.toUpperCase();
+      if (upper.startsWith('CREATE TABLE')) {
+        const match = stmt.match(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)/i);
+        if (match && !this.tables.has(match[1])) {
+          this.tables.set(match[1], []);
+        }
+      } else if (upper.startsWith('PRAGMA')) {
+        // No-op
+      }
+    }
+    return Promise.resolve();
+  }
+
+  prepareAsync(source) {
+    return Promise.resolve(new MockStatement(source, this));
+  }
+
+  closeAsync() {
+    this.tables.clear();
+    this.nextId = 1;
+    return Promise.resolve();
+  }
+
+  async execute(sql, params) {
+    const upper = sql.toUpperCase().trim();
+    if (upper.startsWith('INSERT INTO')) {
+      return this.execInsert(sql, params);
+    }
+    if (upper.startsWith('UPDATE')) {
+      return this.execUpdate(sql, params);
+    }
+    if (upper.startsWith('DELETE FROM')) {
+      return this.execDelete(sql, params);
+    }
+    if (upper.startsWith('SELECT COUNT')) {
+      return this.execSelectCount(sql);
+    }
+    if (upper.startsWith('SELECT')) {
+      return this.execSelect(sql, params);
+    }
+    throw new Error(`SQL not supported by mock: ${sql}`);
+  }
+
+  execInsert(sql, params) {
+    const tableName = sql.match(/INSERT INTO\s+(\w+)/i)[1];
+    const rows = this.tables.get(tableName) || [];
+    const row = {};
+    const columnsMatch = sql.match(/INSERT INTO\s+\w+\s*\(([^)]+)\)/i);
+    const valuesMatch = sql.match(/VALUES\s*\(([^)]+)\)/i);
+    if (columnsMatch && valuesMatch) {
+      const columns = columnsMatch[1].split(',').map((c) => c.trim());
+      const valueTokens = valuesMatch[1].split(',').map((t) => t.trim());
+      let paramIdx = 0;
+      columns.forEach((col, idx) => {
+        const token = valueTokens[idx];
+        if (token === '?') {
+          const val = params[paramIdx++];
+          row[col] = typeof val === 'string' || typeof val === 'number'
+            ? val
+            : val === null
+              ? null
+              : String(val);
+        } else if (token === 'NULL') {
+          row[col] = null;
+        } else if (/^\d+$/.test(token)) {
+          row[col] = parseInt(token, 10);
+        } else {
+          row[col] = null;
+        }
+      });
+    }
+    const id = this.nextId++;
+    row.id = id;
+    rows.push(row);
+    this.tables.set(tableName, rows);
+    return {
+      lastInsertRowId: id,
+      changes: 1,
+      getAllAsync: async () => rows,
+    };
+  }
+
+  execUpdate(sql, params) {
+    const tableName = sql.match(/UPDATE\s+(\w+)/i)[1];
+    const rows = this.tables.get(tableName) || [];
+    // Parse SET clause com indexOf (evita regex lazy + Babel)
+    const sqlUpper = sql.toUpperCase();
+    const setIdx = sqlUpper.indexOf('SET ');
+    const whereIdx = sqlUpper.indexOf(' WHERE ');
+    const setClause = (setIdx >= 0 && whereIdx > setIdx)
+      ? sql.substring(setIdx + 4, whereIdx).trim()
+      : '';
+    const whereClause = (whereIdx >= 0)
+      ? sql.substring(whereIdx + 7).trim()
+      : '';
+    const setItems = parseAssignments(setClause);
+    const whereConditions = parseConditions(whereClause);
+    // WHERE params: vem DEPOIS dos SET params. Vamos contar quantos
+    // SET params existem para saber onde começa os WHERE params.
+    const setParamCount = setItems.filter((a) => a.modifier === undefined).length;
+    const whereParams = params.slice(setParamCount);
+    let changes = 0;
+    for (const row of rows) {
+      if (matchesConditions(row, whereConditions, whereParams)) {
+        applyAssignments(row, setItems, params);
+        changes++;
+      }
+    }
+    return {
+      lastInsertRowId: 0,
+      changes,
+      getAllAsync: async () => rows,
+    };
+  }
+
+  execDelete(sql, params) {
+    const tableName = sql.match(/DELETE FROM\s+(\w+)/i)[1];
+    const rows = this.tables.get(tableName) || [];
+    const sqlUpper = sql.toUpperCase();
+    const whereIdx = sqlUpper.indexOf(' WHERE ');
+    const whereClause = (whereIdx >= 0) ? sql.substring(whereIdx + 7).trim() : '';
+    const whereConditions = parseConditions(whereClause);
+    const matching = rows.filter((row) => matchesConditions(row, whereConditions, params));
+    const newRows = rows.filter((row) => !matchesConditions(row, whereConditions, params));
+    this.tables.set(tableName, newRows);
+    return {
+      lastInsertRowId: 0,
+      changes: matching.length,
+      getAllAsync: async () => newRows,
+    };
+  }
+
+  execSelectCount(sql) {
+    const tableName = sql.match(/FROM\s+(\w+)/i)[1];
+    const rows = this.tables.get(tableName) || [];
+    return {
+      lastInsertRowId: 0,
+      changes: 0,
+      getAllAsync: async () => [{ c: rows.length }],
+    };
+  }
+
+  execSelect(sql, params) {
+    const tableName = sql.match(/FROM\s+(\w+)/i)[1];
+    const rows = this.tables.get(tableName) || [];
+    const sqlUpper = sql.toUpperCase();
+    const whereIdx = sqlUpper.indexOf(' WHERE ');
+    const orderByIdx = sqlUpper.indexOf(' ORDER BY ');
+    const limitIdx = sqlUpper.indexOf(' LIMIT ');
+    let whereClause = '';
+    if (whereIdx >= 0) {
+      const endCandidates = [orderByIdx, limitIdx, sql.length].filter(
+        (idx) => idx > whereIdx,
+      );
+      const end = endCandidates.length > 0 ? Math.min(...endCandidates) : sql.length;
+      whereClause = sql.substring(whereIdx + 7, end).trim();
+    }
+    const whereConditions = parseConditions(whereClause);
+    let result = rows.filter((row) => matchesConditions(row, whereConditions, params));
+    if (orderByIdx >= 0) {
+      const orderClause = sql.substring(orderByIdx + 10).trim();
+      const orderByMatch = orderClause.match(/^(\w+)(?:\s+(ASC|DESC))?/i);
+      if (orderByMatch) {
+        const col = orderByMatch[1];
+        const dir = (orderByMatch[2] || 'ASC').toUpperCase();
+        result = [...result].sort((a, b) => {
+          const av = a[col];
+          const bv = b[col];
+          if (av === bv) return 0;
+          const cmp = av < bv ? -1 : 1;
+          return dir === 'DESC' ? -cmp : cmp;
+        });
+      }
+    }
+    if (limitIdx >= 0) {
+      const limitMatch = sql.substring(limitIdx).match(/LIMIT\s+(\d+)/i);
+      if (limitMatch) {
+        result = result.slice(0, parseInt(limitMatch[1], 10));
+      }
+    }
+    return {
+      lastInsertRowId: 0,
+      changes: 0,
+      getAllAsync: async () => result,
+    };
+  }
+}
+
+function parseAssignments(clause) {
+  return clause.split(',').map((c) => {
+    const trimmed = c.trim();
+    const incMatch = trimmed.match(/^(\w+)\s*=\s*\1\s*\+\s*1$/);
+    if (incMatch) {
+      return { column: incMatch[1], modifier: 'increment' };
+    }
+    const decMatch = trimmed.match(/^(\w+)\s*=\s*\1\s*-\s*1$/);
+    if (decMatch) {
+      return { column: decMatch[1], modifier: 'decrement' };
+    }
+    const eqMatch = trimmed.match(/^(\w+)\s*=\s*\?$/);
+    if (eqMatch) {
+      return { column: eqMatch[1], paramIndex: 0 };
+    }
+    throw new Error(`Unsupported assignment: [${c}]`);
+  });
+}
+
+function parseConditions(clause) {
+  if (!clause) return [];
+  return clause.split(/\s+AND\s+/i).map((c) => {
+    const match = c.trim().match(/(\w+)\s*(<=|>=|<>|!=|<|>|=)\s*\?/);
+    if (!match) throw new Error(`Unsupported condition: ${c}`);
+    return { column: match[1], operator: match[2], paramIndex: 0 };
+  });
+}
+
+function matchesConditions(row, conditions, params) {
+  let paramIdx = 0;
+  return conditions.every((cond) => {
+    const val = params[paramIdx++];
+    const cell = row[cond.column];
+    switch (cond.operator) {
+      case '=':
+        return cell === val;
+      case '<=':
+        return cell <= val;
+      case '<':
+        return cell < val;
+      case '>=':
+        return cell >= val;
+      case '>':
+        return cell > val;
+      case '!=':
+      case '<>':
+        return cell !== val;
+      default:
+        return false;
+    }
+  });
+}
+
+function applyAssignments(row, assignments, params) {
+  let paramIdx = 0;
+  for (const a of assignments) {
+    if (a.modifier === 'increment') {
+      row[a.column] = row[a.column] + 1;
+    } else if (a.modifier === 'decrement') {
+      row[a.column] = row[a.column] - 1;
+    } else if (a.paramIndex !== undefined) {
+      row[a.column] = params[paramIdx++];
+    }
+  }
+}
+
+let dbInstance = null;
+let dbCallCount = 0;
+
+function openDatabaseAsync() {
+  dbCallCount++;
+  if (!dbInstance) {
+    dbInstance = new MockDatabase();
+  }
+  return Promise.resolve(dbInstance);
+}
+
+function __resetMockDb() {
+  if (dbInstance) {
+    dbInstance.closeAsync();
+  }
+  dbInstance = null;
+  dbCallCount = 0;
+}
+
+function __getDbCallCount() {
+  return dbCallCount;
+}
+
+module.exports = { openDatabaseAsync, __resetMockDb, __getDbCallCount };
