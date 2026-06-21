@@ -29,7 +29,8 @@ const config: ExpoConfig = {
   },
   ios: {
     supportsTablet: true,
-    bundleIdentifier: 'local.scorpius.move',
+    // T082: atualizado para 'br.com.scorpius.move' (production namespace)
+    bundleIdentifier: 'br.com.scorpius.move',
     infoPlist: {
       LSApplicationQueriesSchemes: ['whatsapp'],
       // T080: Push notifications + Location (Google Maps nearby)
@@ -42,7 +43,8 @@ const config: ExpoConfig = {
     },
   },
   android: {
-    package: 'local.scorpius.move',
+    // T082: atualizado para 'br.com.scorpius.move' (production namespace)
+    package: 'br.com.scorpius.move',
     adaptiveIcon: {
       backgroundColor: '#0b1220',
     },
