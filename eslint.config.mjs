@@ -5,7 +5,7 @@ import globals from 'globals';
 export default [
   ...expoConfig,
   {
-    ignores: ['node_modules/**', '.expo/**', 'dist/**', 'babel.config.js', 'jest.config.js'],
+    ignores: ['node_modules/**', '.expo/**', 'dist/**', 'babel.config.js', 'jest.config.js', 'metro.config.js'],
   },
   {
     files: ['**/*.test.ts', '**/*.test.tsx', 'jest.setup.js'],
