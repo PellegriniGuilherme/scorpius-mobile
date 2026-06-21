@@ -43,9 +43,29 @@ export class NotificationsService {
   private apiPostDeviceToken: ((token: string, driverId: number) => Promise<void>) | null = null;
 
   /**
+   * T091 R3: silent failure guard. Em production, se EAS project ID
+   * estiver ausente ou malformado, emite console.warn para
+   * visibilidade. Antes disso `getExpoPushTokenAsync` falharia
+   * silenciosamente com erro genérico.
+   */
+  private warnIfInvalidEasProjectId(): void {
+    if (__DEV__) return;
+    const projectId = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId;
+    // UUID v4 tem formato 8-4-4-4-12 hex
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!projectId || projectId === '' || !UUID_REGEX.test(projectId)) {
+      console.warn(
+        `[NotificationsService] EXPO_PUBLIC_EAS_PROJECT_ID ausente ou inválido em production: ${JSON.stringify(projectId)}. ` +
+        'getExpoPushTokenAsync vai falhar. Definir UUID válido em .env e rebuild.',
+      );
+    }
+  }
+
+  /**
    * Configura handler global: mostra notificação mesmo em foreground.
    */
   configureForegroundBehavior(): void {
+    this.warnIfInvalidEasProjectId();
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         // Mostra a notificação mesmo se o app está em foreground

@@ -96,4 +96,40 @@ describe('MapaRotaScreen (T080: Google Maps)', () => {
     expect(screen.getByText('distância')).toBeTruthy();
     expect(screen.getByText('estimativa')).toBeTruthy();
   });
+
+  // T091 R3: silent failure guard
+  it('emits console.warn em production quando API key ausente', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).__DEV__ = false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (Constants.expoConfig as any) = { extra: { googleMapsApiKey: '' } };
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      setRouteParams({ deliveryId: 1001 });
+      renderWithTheme(<MapaRotaScreen />);
+      expect(warnSpy).toHaveBeenCalled();
+      expect(warnSpy.mock.calls[0][0]).toMatch(/EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ausente em production/);
+    } finally {
+      warnSpy.mockRestore();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).__DEV__ = true;
+    }
+  });
+
+  it('NÃO emite console.warn em dev (mesmo sem key)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (Constants.expoConfig as any) = { extra: { googleMapsApiKey: '' } };
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      setRouteParams({ deliveryId: 1001 });
+      renderWithTheme(<MapaRotaScreen />);
+      // __DEV__ é true em jest por padrão — não deve chamar warn
+      const mapsWarnings = warnSpy.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY'),
+      );
+      expect(mapsWarnings).toHaveLength(0);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });

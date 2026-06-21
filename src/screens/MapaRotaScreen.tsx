@@ -45,12 +45,28 @@ function getApiKey(): string {
   return extra.googleMapsApiKey ?? '';
 }
 
+/**
+ * T091 R3: silent failure guard. Em production, se a Google Maps API key
+ * estiver ausente, emite console.warn para visibilidade em produção
+ * (sentry/logs) — antes disso a tela mostrava fallback visual sem
+ * ninguém saber que o mapa real não estava renderizando.
+ */
+function warnIfMissingMapsKeyInProd(apiKey: string): void {
+  if (apiKey.length === 0 && !__DEV__) {
+    console.warn(
+      '[MapaRotaScreen] EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ausente em production. ' +
+      'Mapa vai mostrar fallback visual. Definir key em .env e rebuild.',
+    );
+  }
+}
+
 export function MapaRotaScreen() {
   const route = useRoute<Route_>();
   const { colors, tokens } = useTheme();
   const delivery = findDelivery(route.params.deliveryId);
   const apiKey = getApiKey();
   const hasGoogleMaps = apiKey.length > 0;
+  warnIfMissingMapsKeyInProd(apiKey);
 
   const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
