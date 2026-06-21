@@ -9,6 +9,7 @@ lerna-debug.log*
 dist/
 .expo/
 .expo-shared/
+expo-env.d.ts
 web-build/
 
 # Dependencies
