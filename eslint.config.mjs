@@ -5,7 +5,7 @@ import globals from 'globals';
 export default [
   ...expoConfig,
   {
-    ignores: ['node_modules/**', '.expo/**', 'dist/**', 'babel.config.js', 'jest.config.js'],
+    ignores: ['node_modules/**', '.expo/**', 'dist/**', 'babel.config.js', 'jest.config.js', 'metro.config.js'],
   },
   {
     // Test setup + specs: expõe globals jest e node, desliga no-undef

@@ -10,7 +10,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, type ViewStyle } from 'react-native';
 import { useTheme } from '@/theme/ThemeProvider';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 interface ButtonProps {
   label: string;
@@ -48,6 +48,11 @@ export function Button({
       bg: 'transparent',
       fg: colors.accent,
       border: 'transparent',
+    },
+    danger: {
+      bg: colors.statusDangerSurface,
+      fg: colors.statusDangerText,
+      border: colors.statusDangerBorder,
     },
   }[variant];
 
