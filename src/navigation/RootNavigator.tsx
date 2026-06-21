@@ -51,7 +51,10 @@ function AppFlow({ initial }: { initial?: keyof AppStackParamList }) {
 type PreviewScreen = 'login' | 'otp' | 'home' | 'detalhe' | 'mapa' | 'comprovante' | 'perfil';
 
 function readPreviewFromUrl(): PreviewScreen | null {
-  if (typeof window === 'undefined') return null;
+  // Em ambiente sem window (SSR/native real) ou sem location (jest node
+  // sem jsdom), não há preview. Defesa em profundidade para ambientes
+  // parciais.
+  if (typeof window === 'undefined' || !window.location) return null;
   const params = new URLSearchParams(window.location.search);
   const v = params.get('preview');
   const valid: PreviewScreen[] = ['login', 'otp', 'home', 'detalhe', 'mapa', 'comprovante', 'perfil'];

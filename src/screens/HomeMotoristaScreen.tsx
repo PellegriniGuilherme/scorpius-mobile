@@ -84,6 +84,7 @@ export function HomeMotoristaScreen() {
             ] as Array<[FilterStatus, string]>).map(([key, label]) => (
               <Pressable
                 key={key}
+                testID={`filter-${key}`}
                 onPress={() => setFilter(key)}
                 style={{
                   paddingHorizontal: tokens.space[4],
