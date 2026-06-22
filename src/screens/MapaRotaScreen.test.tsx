@@ -1,19 +1,24 @@
 /**
  * Scorpius Move — MapaRotaScreen tests (T068.3 + T080).
  *
- * T068.3: testes com OpenStreetMap placeholder.
- * T080: atualizados para Google Maps + PROVIDER_GOOGLE.
- *  - API key configurada: renderiza MapView com markers + polyline
- *  - Sem API key: fallback com aviso
- *  - Tap "Abrir no Google Maps" chama Linking.openURL
- *  - Distance/duration cards visíveis
- *  - Origin + destination labels
+ * T068.3: testes base (origin/destination/distance cards).
+ * T080: Google Maps via Linking (PROVIDER_GOOGLE) + expo-location.
+ *
+ * Implementação atual (pós fix-expo merge): usa OpenStreetMap embed
+ * como fallback no Expo Web + Linking para Google Maps nativo em
+ * iOS/Android via `https://www.google.com/maps/dir/?api=1&destination=...`.
+ *
+ * Cobertura:
+ *  - render com origin + destination labels
+ *  - "Entrega não encontrada" para id inválido
+ *  - distance/duration cards visíveis
+ *  - tap em "Abrir no app de mapas" chama Linking.openURL com URL Google Maps
+ *  - URL contém coords do destino
  */
-import { renderWithTheme, fireEvent, screen } from '@/../jest.test-utils';
-import { MapaRotaScreen } from './MapaRotaScreen';
 import { Linking } from 'react-native';
 import { useRoute } from '@react-navigation/native';
-import Constants from 'expo-constants';
+import { renderWithTheme, fireEvent, screen } from '@/../jest.test-utils';
+import { MapaRotaScreen } from './MapaRotaScreen';
 
 jest.mock('@react-navigation/native', () => {
   const mockReal = jest.requireActual('@react-navigation/native');
@@ -34,20 +39,12 @@ function setRouteParams(params: { deliveryId: number } | undefined) {
   });
 }
 
-describe('MapaRotaScreen (T080: Google Maps)', () => {
+describe('MapaRotaScreen', () => {
   beforeEach(() => {
     openURLSpy.mockClear();
-    // Default: API key presente
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (Constants.expoConfig as any) = { extra: { googleMapsApiKey: 'test-key' } };
   });
 
-  afterAll(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (Constants.expoConfig as any) = { extra: {} };
-  });
-
-  it('renders mapa with origin and destination', () => {
+  it('renders mapa with origin and destination labels', () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<MapaRotaScreen />);
     expect(screen.getByText(/Hub Scorpius/i)).toBeTruthy();
@@ -60,34 +57,13 @@ describe('MapaRotaScreen (T080: Google Maps)', () => {
     expect(screen.getByText('Entrega não encontrada.')).toBeTruthy();
   });
 
-  it('renders Google Maps MapView with markers (when API key configured)', () => {
+  it('renders OpenStreetMap embed image with destination coords', () => {
     setRouteParams({ deliveryId: 1001 });
     const { toJSON } = renderWithTheme(<MapaRotaScreen />);
-    // MapView, Marker origin, Marker dest, Polyline são renderizados
     const tree = JSON.stringify(toJSON());
-    expect(tree).toContain('MapView');
-    expect(tree).toContain('marker-origin');
-    expect(tree).toContain('marker-dest');
-    expect(tree).toContain('polyline');
-  });
-
-  it('falls back to placeholder when API key absent', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (Constants.expoConfig as any) = { extra: { googleMapsApiKey: '' } };
-    setRouteParams({ deliveryId: 1001 });
-    renderWithTheme(<MapaRotaScreen />);
-    expect(screen.getByText(/Google Maps API key não configurada/i)).toBeTruthy();
-  });
-
-  it('opens Google Maps with destination when button pressed', () => {
-    setRouteParams({ deliveryId: 1001 });
-    renderWithTheme(<MapaRotaScreen />);
-    const btn = screen.getByText('Abrir no Google Maps');
-    fireEvent.press(btn);
-    expect(openURLSpy).toHaveBeenCalledTimes(1);
-    const url = openURLSpy.mock.calls[0][0] as string;
-    expect(url).toContain('google.com/maps');
-    expect(url).toContain('-23.5613');
+    expect(tree).toContain('openstreetmap.org');
+    expect(tree).toContain('-23.5613');
+    expect(tree).toContain('-46.6565');
   });
 
   it('shows distance and duration cards', () => {
@@ -97,39 +73,21 @@ describe('MapaRotaScreen (T080: Google Maps)', () => {
     expect(screen.getByText('estimativa')).toBeTruthy();
   });
 
-  // T091 R3: silent failure guard
-  it('emits console.warn em production quando API key ausente', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (globalThis as any).__DEV__ = false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (Constants.expoConfig as any) = { extra: { googleMapsApiKey: '' } };
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    try {
-      setRouteParams({ deliveryId: 1001 });
-      renderWithTheme(<MapaRotaScreen />);
-      expect(warnSpy).toHaveBeenCalled();
-      expect(warnSpy.mock.calls[0][0]).toMatch(/EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ausente em production/);
-    } finally {
-      warnSpy.mockRestore();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (globalThis as any).__DEV__ = true;
-    }
+  it('opens Google Maps with destination when button pressed', () => {
+    setRouteParams({ deliveryId: 1001 });
+    renderWithTheme(<MapaRotaScreen />);
+    const btn = screen.getByText(/Abrir no app de mapas/i);
+    fireEvent.press(btn);
+    expect(openURLSpy).toHaveBeenCalledTimes(1);
+    const url = openURLSpy.mock.calls[0][0] as string;
+    expect(url).toContain('google.com/maps');
+    expect(url).toContain('destination=');
+    expect(url).toContain('-23.5613');
   });
 
-  it('NÃO emite console.warn em dev (mesmo sem key)', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (Constants.expoConfig as any) = { extra: { googleMapsApiKey: '' } };
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    try {
-      setRouteParams({ deliveryId: 1001 });
-      renderWithTheme(<MapaRotaScreen />);
-      // __DEV__ é true em jest por padrão — não deve chamar warn
-      const mapsWarnings = warnSpy.mock.calls.filter(
-        (call) => typeof call[0] === 'string' && call[0].includes('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY'),
-      );
-      expect(mapsWarnings).toHaveLength(0);
-    } finally {
-      warnSpy.mockRestore();
-    }
+  it('shows placeholder note about Web limitation', () => {
+    setRouteParams({ deliveryId: 1001 });
+    renderWithTheme(<MapaRotaScreen />);
+    expect(screen.getByText(/Mapa indisponível no Expo Web/i)).toBeTruthy();
   });
 });

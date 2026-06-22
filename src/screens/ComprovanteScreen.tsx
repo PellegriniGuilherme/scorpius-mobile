@@ -1,23 +1,41 @@
+/**
+ * Scorpius Move — Comprovante de entrega (F2.10 outbox).
+ *
+ * Fluxo:
+ *  1. Motorista tira foto do pacote (expo-image-picker) →
+ *     salva em cache local (expo-file-system)
+ *  2. Digita nome do destinatário (signature)
+ *  3. Tap "Confirmar entrega" → enqueue no OutboxService
+ *  4. SyncWorker (background) faz upload para backend via apiClient
+ *  5. Sucesso → markDone + tela de sucesso
+ *  6. Falha (após MAX_ATTEMPTS) → DLQ + badge "Falhou — Tentar novamente"
+ *
+ * Em Expo Web (sessão atual): expo-image-picker mockado para retornar
+ * canceled=true (não há câmera real no web). O placeholder visual
+ * "Aguardando captura" continua aparecendo.
+ */
 import { useState } from 'react';
-import { ScrollView, Text, View, TextInput } from 'react-native';
+import { ScrollView, Text, View, TextInput, ActivityIndicator } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { findDelivery } from '@/mocks/deliveries';
+import { outbox } from '@/services/OutboxService';
+import { syncWorker } from '@/services/SyncWorker';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
 import type { AppStackParamList } from '@/navigation/types';
 
 type Route_ = RouteProp<AppStackParamList, 'Comprovante'>;
 
+type OutboxSyncStatus = 'idle' | 'pending' | 'failed';
+
 export function ComprovanteScreen() {
   const route = useRoute<Route_>();
   const { colors, tokens } = useTheme();
   const delivery = findDelivery(route.params.deliveryId);
-
-  const [photoCaptured, setPhotoCaptured] = useState(false);
-  const [signatureName, setSignatureName] = useState('');
-  const [submitted, setSubmitted] = useState(false);
 
   if (!delivery) {
     return (
@@ -27,7 +45,92 @@ export function ComprovanteScreen() {
     );
   }
 
-  const canSubmit = photoCaptured && signatureName.trim().length >= 3;
+  return <ComprovanteScreenInner delivery={delivery} />;
+}
+
+function ComprovanteScreenInner({ delivery }: { delivery: NonNullable<ReturnType<typeof findDelivery>> }) {
+  const { colors, tokens } = useTheme();
+  const [photoPath, setPhotoPath] = useState<string | null>(null);
+  const [signatureName, setSignatureName] = useState('');
+  const [outboxId, setOutboxId] = useState<number | null>(null);
+  const [syncStatus, setSyncStatus] = useState<OutboxSyncStatus>('idle');
+  const [submitted, setSubmitted] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+
+  const hasPhoto = !!photoPath;
+  const canSubmit = hasPhoto && signatureName.trim().length >= 3;
+
+  async function handleCapturePhoto() {
+    if (capturing) return;
+    const deliveryId = delivery.id;
+    setCapturing(true);
+    try {
+      // expo-image-picker.launchCameraAsync abre a câmera nativa.
+      // No Expo Web (mock) retorna canceled=true. Em iOS/Android
+      // retorna { canceled: false, assets: [{ uri: 'file://...' }] }.
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.7,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      // Copia para cache local persistente (sobrevive a reload do app).
+      // expo-file-system v18+: usa funções top-level (cacheDirectory, makeDirectoryAsync, copyAsync).
+      const src = result.assets[0].uri;
+      const cacheRoot = FileSystem.cacheDirectory ?? '';
+      const proofsDir = `${cacheRoot}proofs/`;
+      const dst = `${proofsDir}${deliveryId}-${Date.now()}.jpg`;
+      try {
+        await FileSystem.makeDirectoryAsync(proofsDir, { intermediates: true });
+      } catch {
+        // diretório já existe — no-op
+      }
+      await FileSystem.copyAsync({ from: src, to: dst });
+      setPhotoPath(dst);
+    } finally {
+      setCapturing(false);
+    }
+  }
+
+  async function handleSubmit() {
+    if (!canSubmit || !photoPath) return;
+    const id = await outbox.enqueue('proof_upload', {
+      deliveryId: delivery.id,
+      photoPath,
+      signaturePath: signatureName.trim(),
+    });
+    setOutboxId(id);
+    setSyncStatus('pending');
+    setSubmitted(true);
+    // Tenta sincronizar imediatamente (SyncWorker.tick é idempotente
+    // e respeita o estado online/inactive)
+    try {
+      await syncWorker.tick();
+    } catch {
+      // Falha silenciosa — outbox já registrou, próximo tick vai tentar
+    }
+    // Re-checa status após tick (se sucesso, item removido)
+    const items = await outbox.getAll();
+    const stillThere = items.find((i) => i.id === id);
+    if (stillThere) {
+      setSyncStatus(stillThere.next_retry_at === 0 ? 'failed' : 'pending');
+    } else {
+      setSyncStatus('pending'); // Saiu, mas ainda mostra "Sincronizando" brevemente
+    }
+  }
+
+  async function handleRetry() {
+    if (!outboxId) return;
+    // Re-enfileira: zera attempts + next_retry_at via markFailed
+    // com backoff 0 (immediate). Em produção, "Reenviar" deveria
+    // ser uma action mais explícita; aqui simplificamos.
+    await outbox.markFailed(outboxId, 'manual retry', Date.now());
+    setSyncStatus('pending');
+    try {
+      await syncWorker.tick();
+    } catch {
+      // ignore
+    }
+  }
 
   if (submitted) {
     return (
@@ -48,6 +151,20 @@ export function ComprovanteScreen() {
         <Text style={{ fontSize: tokens.text.base, color: colors.textMuted, textAlign: 'center' }}>
           {ptBR.proof.successDesc}
         </Text>
+        {syncStatus === 'pending' && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[2], marginTop: tokens.space[4] }}>
+            <ActivityIndicator color={colors.accent} size="small" />
+            <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm }}>Sincronizando com servidor…</Text>
+          </View>
+        )}
+        {syncStatus === 'failed' && (
+          <View style={{ marginTop: tokens.space[4], gap: tokens.space[2] }}>
+            <Text style={{ color: colors.statusDangerText, fontSize: tokens.text.sm, textAlign: 'center' }}>
+              Falhou ao enviar. Tente novamente.
+            </Text>
+            <Button label="Reenviar" variant="secondary" onPress={handleRetry} />
+          </View>
+        )}
       </View>
     );
   }
@@ -70,17 +187,17 @@ export function ComprovanteScreen() {
             style={{
               marginTop: tokens.space[3],
               height: 180,
-              backgroundColor: photoCaptured ? colors.statusSuccessSurface : colors.surfaceInset,
-              borderColor: photoCaptured ? colors.statusSuccessBorder : colors.borderDefault,
+              backgroundColor: hasPhoto ? colors.statusSuccessSurface : colors.surfaceInset,
+              borderColor: hasPhoto ? colors.statusSuccessBorder : colors.borderDefault,
               borderWidth: 2,
               borderRadius: tokens.radius.md,
-              borderStyle: photoCaptured ? 'solid' : 'dashed',
+              borderStyle: hasPhoto ? 'solid' : 'dashed',
               alignItems: 'center',
               justifyContent: 'center',
               gap: tokens.space[2],
             }}
           >
-            {photoCaptured ? (
+            {hasPhoto ? (
               <>
                 <Text style={{ fontSize: 48, color: colors.statusSuccessMarker }}>📷</Text>
                 <Text style={{ color: colors.statusSuccessText, fontWeight: tokens.weight.semibold }}>Foto capturada</Text>
@@ -94,9 +211,11 @@ export function ComprovanteScreen() {
           </View>
           <View style={{ marginTop: tokens.space[3] }}>
             <Button
-              label={photoCaptured ? ptBR.proof.retakePhoto : ptBR.proof.capturePhoto}
-              variant={photoCaptured ? 'ghost' : 'secondary'}
-              onPress={() => setPhotoCaptured(true)}
+              label={hasPhoto ? ptBR.proof.retakePhoto : capturing ? 'Abrindo câmera…' : ptBR.proof.capturePhoto}
+              variant={hasPhoto ? 'ghost' : 'secondary'}
+              onPress={handleCapturePhoto}
+              loading={capturing}
+              disabled={capturing}
               fullWidth
             />
           </View>
@@ -142,7 +261,7 @@ export function ComprovanteScreen() {
           </View>
         </Card>
 
-        <Button label={ptBR.proof.submit} onPress={() => setSubmitted(true)} disabled={!canSubmit} fullWidth />
+        <Button label={ptBR.proof.submit} onPress={handleSubmit} disabled={!canSubmit} fullWidth />
 
         <Card>
           <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs, lineHeight: 18 }}>{ptBR.proof.placeholder}</Text>
