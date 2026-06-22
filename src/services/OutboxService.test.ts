@@ -164,3 +164,94 @@ describe('OutboxService', () => {
     expect(item.updated_at).toBeGreaterThan(item.created_at);
   });
 });
+
+// ---------------------------------------------------------------------------
+// T098 — DLQ (Dead Letter Queue) tests.
+// DLQ items são os que falharam MAX_ATTEMPTS vezes e estão com next_retry_at = 0.
+// ---------------------------------------------------------------------------
+
+describe('OutboxService DLQ (T098)', () => {
+  let dlqSvc: OutboxService;
+
+  beforeEach(async () => {
+    __resetMockDb();
+    dlqSvc = new OutboxService();
+    await dlqSvc.init();
+  });
+
+  afterEach(async () => {
+    await dlqSvc.close();
+    __resetMockDb();
+  });
+
+  it('getDLQCount() returns 0 for empty outbox', async () => {
+    expect(await dlqSvc.getDLQCount()).toBe(0);
+  });
+
+  it('getDLQCount() excludes pending items (next_retry_at > 0)', async () => {
+    await dlqSvc.enqueue('proof_upload', { deliveryId: 1 });
+    await dlqSvc.enqueue('proof_upload', { deliveryId: 2 });
+    expect(await dlqSvc.getDLQCount()).toBe(0);
+  });
+
+  it('getDLQCount() counts only DLQ items (attempts >= MAX_ATTEMPTS + next_retry_at = 0)', async () => {
+    const id1 = await dlqSvc.enqueue('proof_upload', { deliveryId: 1 });
+    const id2 = await dlqSvc.enqueue('proof_upload', { deliveryId: 2 });
+    const id3 = await dlqSvc.enqueue('proof_upload', { deliveryId: 3 });
+    // Força DLQ em id1 e id2: 5 markFailed cada → attempts=5
+    for (let i = 0; i < 5; i++) {
+      await dlqSvc.markFailed(id1, '[DLQ] network timeout', 0);
+      await dlqSvc.markFailed(id2, '[DLQ] 500 server error', 0);
+    }
+    // id3 fica pending (1 falha + retry futuro)
+    await dlqSvc.markFailed(id3, 'temporary fail', Date.now() + 30_000);
+
+    expect(await dlqSvc.getDLQCount()).toBe(2);
+  });
+
+  it('getDLQItems() returns DLQ items only, ordered by created_at DESC', async () => {
+    const id1 = await dlqSvc.enqueue('proof_upload', { deliveryId: 100 });
+    await new Promise((r) => setTimeout(r, 5));
+    const id2 = await dlqSvc.enqueue('proof_upload', { deliveryId: 200 });
+    for (let i = 0; i < 5; i++) {
+      await dlqSvc.markFailed(id1, '[DLQ] err1', 0);
+      await dlqSvc.markFailed(id2, '[DLQ] err2', 0);
+    }
+
+    const items = await dlqSvc.getDLQItems();
+    expect(items).toHaveLength(2);
+    expect(items[0].id).toBe(id2);
+    expect(items[1].id).toBe(id1);
+    expect(items[0].last_error).toBe('[DLQ] err2');
+    expect(items[1].last_error).toBe('[DLQ] err1');
+  });
+
+  it('retryDLQ() reseta attempts=0 + last_error=null', async () => {
+    const id = await dlqSvc.enqueue('proof_upload', { deliveryId: 42 });
+    for (let i = 0; i < 5; i++) {
+      await dlqSvc.markFailed(id, `[DLQ attempt ${i + 1}]`, 0);
+    }
+    expect(await dlqSvc.getDLQCount()).toBe(1);
+
+    await dlqSvc.retryDLQ(id);
+
+    const items = await dlqSvc.getAll();
+    const item = items.find((i) => i.id === id) as OutboxItem;
+    expect(item.attempts).toBe(0);
+    expect(item.last_error).toBeNull();
+    expect(item.next_retry_at).toBe(0);
+  });
+
+  it('retryDLQ() não afeta items que não estão na DLQ (attempts < MAX_ATTEMPTS)', async () => {
+    const id = await dlqSvc.enqueue('proof_upload', { deliveryId: 50 });
+    await dlqSvc.markFailed(id, 'temporary', Date.now() + 30_000);
+
+    await dlqSvc.retryDLQ(id);
+
+    const items = await dlqSvc.getAll();
+    const item = items.find((i) => i.id === id) as OutboxItem;
+    expect(item.attempts).toBe(1);
+    expect(item.next_retry_at).toBeGreaterThan(0);
+    expect(item.last_error).toBe('temporary');
+  });
+});

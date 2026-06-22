@@ -16,6 +16,7 @@ import { useRoute } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { outbox } from '@/services/OutboxService';
 import { syncWorker } from '@/services/SyncWorker';
+import { __resetMockDb } from '../../jest.sqlite-mock.js';
 
 jest.mock('@react-navigation/native', () => {
   const mockReal = jest.requireActual('@react-navigation/native');
@@ -137,5 +138,80 @@ describe('ComprovanteScreen', () => {
       expect(screen.getByText(/Sincronizando/i)).toBeTruthy();
     });
     expect(failingUpload).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T098 — DLQ UI tests.
+// ---------------------------------------------------------------------------
+
+describe('ComprovanteScreen DLQ UI (T098)', () => {
+  beforeEach(() => {
+    __resetMockDb();
+    (ImagePicker.launchCameraAsync as jest.Mock).mockReset();
+    return outbox.close();
+  });
+
+  afterAll(() => outbox.close());
+
+  it('shows DLQ badge quando há items na DLQ', async () => {
+    // Setup: cria 1 item e força DLQ (5 markFailed → attempts=5 + next_retry_at=0)
+    await outbox.init();
+    const id = await outbox.enqueue('proof_upload', {
+      deliveryId: 5000,
+      photoPath: '/cache/x.jpg',
+      signaturePath: 'tester',
+    });
+    for (let i = 0; i < 5; i++) {
+      await outbox.markFailed(id, '[DLQ] test', 0);
+    }
+
+    setRouteParams({ deliveryId: 1001 });
+    renderWithTheme(<ComprovanteScreen />);
+
+    // Badge aparece após o useEffect rodar
+    const badge = await screen.findByTestId('dlq-badge');
+    expect(badge).toBeTruthy();
+    expect(screen.getByText(/1 item falhou/i)).toBeTruthy();
+  });
+
+  it('does NOT show DLQ badge quando outbox está vazio', async () => {
+    await outbox.init();
+    // sem items
+
+    setRouteParams({ deliveryId: 1001 });
+    renderWithTheme(<ComprovanteScreen />);
+
+    // Espera o useEffect rodar e dar tempo do refresh
+    await new Promise((r) => setTimeout(r, 100));
+    expect(screen.queryByTestId('dlq-badge')).toBeNull();
+  });
+
+  it('tap no badge abre modal com lista de items + botão retry', async () => {
+    await outbox.init();
+    const id = await outbox.enqueue('proof_upload', {
+      deliveryId: 6000,
+      photoPath: '/cache/y.jpg',
+      signaturePath: 'retryme',
+    });
+    for (let i = 0; i < 5; i++) {
+      await outbox.markFailed(id, '[DLQ] something', 0);
+    }
+
+    setRouteParams({ deliveryId: 1001 });
+    renderWithTheme(<ComprovanteScreen />);
+
+    const badge = await screen.findByTestId('dlq-badge');
+    fireEvent.press(badge);
+
+    // Modal abre
+    const modal = await screen.findByTestId('dlq-modal');
+    expect(modal).toBeTruthy();
+    // Item da DLQ listado
+    const item = await screen.findByTestId(`dlq-item-${id}`);
+    expect(item).toBeTruthy();
+    // Botão de retry presente
+    const retryBtn = screen.getByTestId(`dlq-retry-${id}`);
+    expect(retryBtn).toBeTruthy();
   });
 });

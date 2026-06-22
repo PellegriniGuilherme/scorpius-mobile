@@ -30,6 +30,14 @@
  */
 import * as SQLite from 'expo-sqlite';
 
+/**
+ * Número máximo de tentativas antes do item ir para DLQ.
+ * Hardcoded aqui (não importado de SyncWorker) para evitar import circular
+ * (SyncWorker importa este módulo para acessar o `outbox` singleton).
+ * Mantido em sincronia com BACKOFF_SECONDS.length em SyncWorker.ts.
+ */
+const MAX_ATTEMPTS = 5;
+
 export type OutboxType = 'proof_upload';
 
 export interface OutboxItem {
@@ -191,6 +199,65 @@ export class OutboxService {
     const rows = await result.getAllAsync();
     await stmt.finalizeAsync();
     return rows[0]?.c ?? 0;
+  }
+
+  /**
+   * T098 — DLQ items: `attempts >= MAX_ATTEMPTS` E `next_retry_at = 0`.
+   * Lista para o motorista ver o que falhou e reenviar manualmente.
+   * Importante: filtra também por attempts para não confundir com items
+   * "ready to process" (next_retry_at = 0 + attempts < MAX).
+   */
+  async getDLQItems(): Promise<OutboxItem[]> {
+    await this.init();
+    const db = this.requireDb();
+    const stmt = await db.prepareAsync(
+      `SELECT id, type, payload, attempts, next_retry_at, last_error, created_at, updated_at
+       FROM outbox
+       WHERE next_retry_at = 0 AND attempts >= ?
+       ORDER BY created_at DESC`,
+    );
+    const result = await stmt.executeAsync<OutboxRow>([MAX_ATTEMPTS]);
+    const rows = await result.getAllAsync();
+    await stmt.finalizeAsync();
+    return rows.map(rowToItem);
+  }
+
+  /**
+   * T098 — badge "X itens na DLQ".
+   */
+  async getDLQCount(): Promise<number> {
+    await this.init();
+    const db = this.requireDb();
+    const stmt = await db.prepareAsync(
+      `SELECT COUNT(*) as c FROM outbox WHERE next_retry_at = 0 AND attempts >= ?`,
+    );
+    const result = await stmt.executeAsync<{ c: number }>([MAX_ATTEMPTS]);
+    const rows = await result.getAllAsync();
+    await stmt.finalizeAsync();
+    return rows[0]?.c ?? 0;
+  }
+
+  /**
+   * T098 — re-enfileira item da DLQ: zera attempts + last_error.
+   * Mantém next_retry_at = 0 (immediate). SyncWorker.tick() vai pegar
+   * no próximo tick.
+   *
+   * Pré-condição: item está na DLQ (attempts >= MAX_ATTEMPTS).
+   */
+  async retryDLQ(id: number): Promise<void> {
+    await this.init();
+    const db = this.requireDb();
+    const now = Date.now();
+    const stmt = await db.prepareAsync(
+      `UPDATE outbox
+       SET attempts = 0,
+           next_retry_at = 0,
+           last_error = NULL,
+           updated_at = ?
+       WHERE id = ? AND attempts >= ?`,
+    );
+    await stmt.executeAsync([now, id, MAX_ATTEMPTS]);
+    await stmt.finalizeAsync();
   }
 
   /**

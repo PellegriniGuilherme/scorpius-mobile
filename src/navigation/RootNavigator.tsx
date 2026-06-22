@@ -10,7 +10,12 @@
  * este caminho é no-op (params da URL não confiáveis).
  */
 import { useEffect, useMemo } from 'react';
-import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DefaultTheme,
+  DarkTheme,
+  createNavigationContainerRef,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View } from 'react-native';
 import { LoginScreen } from '@/screens/LoginScreen';
@@ -23,10 +28,18 @@ import { PerfilMotoristaScreen } from '@/screens/PerfilMotoristaScreen';
 import { useAuthStore } from '@/store/auth';
 import { useTheme } from '@/theme/ThemeProvider';
 import { setupSyncWorker } from '@/api/boot';
+import { notifications } from '@/services/NotificationsService';
 import type { AuthStackParamList, AppStackParamList } from './types';
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const AppStack = createNativeStackNavigator<AppStackParamList>();
+
+/**
+ * T099 — referência global ao NavigationContainer para permitir
+ * navegação a partir de handlers externos (push notifications,
+ * deep links).
+ */
+export const navigationRef = createNavigationContainerRef<AppStackParamList>();
 
 function AuthFlow() {
   return (
@@ -129,6 +142,13 @@ export function RootNavigator() {
     // T103 R-M3: wire-up do SyncWorker no boot. Sem isso, todo upload fica
     // preso no outbox (api = null → "api client not configured" → retry loop).
     setupSyncWorker();
+    // T099 R-M4: registra handler de push notification que navega
+    // via navigationRef quando o motorista toca na notificação.
+    notifications.onNotificationResponse((deliveryId) => {
+      if (navigationRef.isReady()) {
+        navigationRef.navigate('DetalheEntrega', { deliveryId });
+      }
+    });
   }, [bootstrap]);
 
   const previewScreen = useMemo(() => readPreviewFromUrl(), []);
@@ -165,6 +185,23 @@ export function RootNavigator() {
   };
 
   return (
-    <NavigationContainer theme={navTheme}>{isAuthenticated ? <AppFlow /> : <AuthFlow />}</NavigationContainer>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navTheme}
+      linking={{
+        prefixes: ['scorpius://', 'https://app.scorpius.com.br'],
+        config: {
+          screens: {
+            HomeMotorista: 'home',
+            DetalheEntrega: 'delivery/:deliveryId',
+            MapaRota: 'delivery/:deliveryId/route',
+            Comprovante: 'delivery/:deliveryId/proof',
+            PerfilMotorista: 'profile',
+          },
+        },
+      }}
+    >
+      {isAuthenticated ? <AppFlow /> : <AuthFlow />}
+    </NavigationContainer>
   );
 }

@@ -63,7 +63,7 @@ class MockDatabase {
       return this.execDelete(sql, params);
     }
     if (upper.startsWith('SELECT COUNT')) {
-      return this.execSelectCount(sql);
+      return this.execSelectCount(sql, params);
     }
     if (upper.startsWith('SELECT')) {
       return this.execSelect(sql, params);
@@ -125,9 +125,10 @@ class MockDatabase {
       : '';
     const setItems = parseAssignments(setClause);
     const whereConditions = parseConditions(whereClause);
-    // WHERE params: vem DEPOIS dos SET params. Vamos contar quantos
-    // SET params existem para saber onde começa os WHERE params.
-    const setParamCount = setItems.filter((a) => a.modifier === undefined).length;
+    // WHERE params: vem DEPOIS dos SET params. Conta apenas assignments
+    // que consomem param (? placeholders) — literals e modifier (increment)
+    // não consomem.
+    const setParamCount = setItems.filter((a) => a.paramIndex !== undefined).length;
     const whereParams = params.slice(setParamCount);
     let changes = 0;
     for (const row of rows) {
@@ -160,13 +161,22 @@ class MockDatabase {
     };
   }
 
-  execSelectCount(sql) {
+  execSelectCount(sql, params) {
     const tableName = sql.match(/FROM\s+(\w+)/i)[1];
     const rows = this.tables.get(tableName) || [];
+    // Apply WHERE filter (same logic as execSelect)
+    const sqlUpper = sql.toUpperCase();
+    const whereIdx = sqlUpper.indexOf(' WHERE ');
+    let whereClause = '';
+    if (whereIdx >= 0) {
+      whereClause = sql.substring(whereIdx + 7).trim();
+    }
+    const whereConditions = parseConditions(whereClause);
+    const filtered = rows.filter((row) => matchesConditions(row, whereConditions, params || []));
     return {
       lastInsertRowId: 0,
       changes: 0,
-      getAllAsync: async () => [{ c: rows.length }],
+      getAllAsync: async () => [{ c: filtered.length }],
     };
   }
 
@@ -231,6 +241,20 @@ function parseAssignments(clause) {
     if (eqMatch) {
       return { column: eqMatch[1], paramIndex: 0 };
     }
+    // Literal value: column = 0, column = NULL, column = 'foo'
+    const literalMatch = trimmed.match(/^(\w+)\s*=\s*(NULL|(-?\d+(?:\.\d+)?)|'([^']*)')$/i);
+    if (literalMatch) {
+      const column = literalMatch[1];
+      let literalValue = null;
+      if (literalMatch[2] === 'NULL') {
+        literalValue = null;
+      } else if (literalMatch[3] !== undefined) {
+        literalValue = Number(literalMatch[3]);
+      } else if (literalMatch[4] !== undefined) {
+        literalValue = literalMatch[4];
+      }
+      return { column, literal: literalValue };
+    }
     throw new Error(`Unsupported assignment: [${c}]`);
   });
 }
@@ -239,15 +263,28 @@ function parseConditions(clause) {
   if (!clause) return [];
   return clause.split(/\s+AND\s+/i).map((c) => {
     const match = c.trim().match(/(\w+)\s*(<=|>=|<>|!=|<|>|=)\s*\?/);
-    if (!match) throw new Error(`Unsupported condition: ${c}`);
-    return { column: match[1], operator: match[2], paramIndex: 0 };
+    if (match) {
+      return { column: match[1], operator: match[2], paramIndex: 0 };
+    }
+    // Literal comparison: column = 0, column = 'foo'
+    const literalMatch = c.trim().match(/(\w+)\s*(<=|>=|<>|!=|<|>|=)\s*(NULL|(-?\d+(?:\.\d+)?)|'([^']*)')$/i);
+    if (literalMatch) {
+      const column = literalMatch[1];
+      const operator = literalMatch[2];
+      let literalValue = null;
+      if (literalMatch[3] === 'NULL') literalValue = null;
+      else if (literalMatch[4] !== undefined) literalValue = Number(literalMatch[4]);
+      else if (literalMatch[5] !== undefined) literalValue = literalMatch[5];
+      return { column, operator, literal: literalValue };
+    }
+    throw new Error(`Unsupported condition: ${c}`);
   });
 }
 
 function matchesConditions(row, conditions, params) {
   let paramIdx = 0;
   return conditions.every((cond) => {
-    const val = params[paramIdx++];
+    const val = cond.literal !== undefined ? cond.literal : params[paramIdx++];
     const cell = row[cond.column];
     switch (cond.operator) {
       case '=':
@@ -276,6 +313,8 @@ function applyAssignments(row, assignments, params) {
       row[a.column] = row[a.column] + 1;
     } else if (a.modifier === 'decrement') {
       row[a.column] = row[a.column] - 1;
+    } else if (a.literal !== undefined) {
+      row[a.column] = a.literal;
     } else if (a.paramIndex !== undefined) {
       row[a.column] = params[paramIdx++];
     }

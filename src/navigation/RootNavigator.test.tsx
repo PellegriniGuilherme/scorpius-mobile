@@ -1,13 +1,28 @@
 /**
- * Scorpius Move — RootNavigator tests (T068.2).
+ * Scorpius Move — RootNavigator tests (T068.2 + T099).
  *
  * Cobre:
  *  - sem driver autenticado: mostra LoginScreen
  *  - com driver autenticado: mostra HomeMotoristaScreen
- *  - preview mode (?preview=screen=home) força uma tela sem auth
+ *  - preview mode (?preview=NAME) força uma tela sem auth
+ *  - navigationRef para push notifications + deep links (T099)
  */
+
+// Mock expo-notifications porque RootNavigator importa NotificationsService
+// (T099) que importa expo-notifications → expo-asset → precisa de Expo global.
+jest.mock('expo-notifications', () => ({
+  setNotificationHandler: jest.fn(),
+  getPermissionsAsync: jest.fn().mockResolvedValue({ granted: false }),
+  requestPermissionsAsync: jest.fn().mockResolvedValue({ granted: false }),
+  getExpoPushTokenAsync: jest.fn().mockResolvedValue({ data: 'ExponentPushToken[mock]' }),
+  addNotificationReceivedListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+  addNotificationResponseReceivedListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+}));
+
+jest.mock('expo-device', () => ({ isDevice: true }));
+
 import { renderWithTheme, screen, waitFor } from '@/../jest.test-utils';
-import { RootNavigator } from './RootNavigator';
+import { RootNavigator, navigationRef } from './RootNavigator';
 import { useAuthStore } from '@/store/auth';
 import * as clientApi from '@/api/client';
 
@@ -120,5 +135,49 @@ describe('RootNavigator', () => {
         configurable: true,
       });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T099 — Deep link / navigationRef tests.
+// ---------------------------------------------------------------------------
+
+describe('RootNavigator navigationRef (T099)', () => {
+  it('navigationRef é exportado e configurado', () => {
+    expect(navigationRef).toBeDefined();
+    expect(typeof navigationRef.navigate).toBe('function');
+    expect(typeof navigationRef.isReady).toBe('function');
+  });
+
+  it('deep link URL "scorpius://delivery/1234" extrai deliveryId', () => {
+    const url = 'scorpius://delivery/1234';
+    const match = url.match(/\/delivery\/(\d+)/);
+    expect(match).not.toBeNull();
+    expect(match?.[1]).toBe('1234');
+    expect(parseInt(match![1], 10)).toBe(1234);
+  });
+
+  it('deep link URL "https://app.scorpius.com.br/delivery/5678" extrai deliveryId', () => {
+    const url = 'https://app.scorpius.com.br/delivery/5678';
+    const match = url.match(/\/delivery\/(\d+)/);
+    expect(match).not.toBeNull();
+    expect(match?.[1]).toBe('5678');
+  });
+
+  it('URL inválida (sem /delivery/) retorna null match', () => {
+    const url = 'scorpius://profile';
+    const match = url.match(/\/delivery\/(\d+)/);
+    expect(match).toBeNull();
+  });
+
+  it('URL com deliveryId não-numérico não parseia', () => {
+    const url = 'scorpius://delivery/abc';
+    const match = url.match(/\/delivery\/(\d+)/);
+    expect(match).toBeNull();
+  });
+
+  it('navigationRef.navigate aceita chamada sem crash (sem container)', () => {
+    // navigationRef pode estar não-ready em ambiente de teste
+    expect(() => navigationRef.navigate('DetalheEntrega', { deliveryId: 9999 })).not.toThrow();
   });
 });

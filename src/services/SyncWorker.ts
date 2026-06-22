@@ -46,7 +46,7 @@ import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import { outbox as defaultOutbox, type OutboxItem, type OutboxService } from './OutboxService';
 
 const BACKOFF_SECONDS = [30, 60, 120, 300, 600] as const;
-const MAX_ATTEMPTS = BACKOFF_SECONDS.length; // 5
+export const MAX_ATTEMPTS = BACKOFF_SECONDS.length; // 5
 
 /**
  * T091 S3: jitter exponencial para evitar thundering herd.
