@@ -25,7 +25,7 @@ const config: ExpoConfig = {
   orientation: 'portrait',
   scheme: 'scorpiusmove',
   userInterfaceStyle: 'automatic',
-  newArchEnabled: true,
+  newArchEnabled: false,
   splash: {
     backgroundColor: '#0b1220',
     resizeMode: 'contain',
