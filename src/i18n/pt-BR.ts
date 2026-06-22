@@ -28,6 +28,9 @@ export const ptBR = {
     submitting: 'Confirmando...',
     resend: 'Reenviar código',
     resendIn: 'Reenviar em {seconds}s',
+    // T101: countdown do OTP (TTL total). Format m:ss.
+    expiresIn: 'Expira em {time}',
+    expired: 'Código expirado. Toque em "Reenviar código".',
     errorInvalidCode: 'Código inválido ou expirado.',
     errorGeneric: 'Não foi possível confirmar. Tente novamente.',
   },

@@ -20,6 +20,7 @@ interface ButtonProps {
   loading?: boolean;
   fullWidth?: boolean;
   style?: ViewStyle;
+  testID?: string;
 }
 
 export function Button({
@@ -30,6 +31,7 @@ export function Button({
   loading = false,
   fullWidth = false,
   style,
+  testID,
 }: ButtonProps) {
   const { colors, tokens } = useTheme();
 
@@ -78,6 +80,7 @@ export function Button({
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
+      testID={testID}
     >
       {loading ? (
         <ActivityIndicator color={variantStyles.fg} size="small" />
