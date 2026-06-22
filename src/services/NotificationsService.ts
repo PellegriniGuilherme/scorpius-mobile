@@ -70,6 +70,7 @@ export class NotificationsService {
       handleNotification: async () => ({
         // Mostra a notificação mesmo se o app está em foreground
         // (UX: motorista vê entrega nova imediatamente)
+        shouldShowAlert: true,
         shouldShowBanner: true,
         shouldShowList: true,
         shouldPlaySound: true,
