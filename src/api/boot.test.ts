@@ -47,7 +47,7 @@ describe('boot wiring (T104)', () => {
   });
 
   describe('createProofUploadAdapter', () => {
-    it('faz o flow T072+T076+T077: POST /proof-upload → PUT → POST /complete', async () => {
+    it('faz o flow T072+T076+T077: POST /proof-upload → PUT → POST /complete (com Idempotency-Key header)', async () => {
       const postMock = jest
         .spyOn(apiClient, 'post')
         .mockResolvedValueOnce({
@@ -79,18 +79,61 @@ describe('boot wiring (T104)', () => {
         signaturePath: 'João da Silva',
       });
 
-      // 1. POST /proof-upload
-      expect(postMock).toHaveBeenCalledWith('/deliveries/1001/proof-upload', {
-        signatureName: 'João da Silva',
-      });
-      // 2. PUT pre-signed URL
+      // T100: Idempotency-Key UUID v4 no POST /proof-upload.
+      expect(postMock).toHaveBeenCalledWith(
+        '/deliveries/1001/proof-upload',
+        { signatureName: 'João da Silva' },
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Idempotency-Key': expect.stringMatching(/^[0-9a-f-]{36}$/),
+          }),
+        }),
+      );
       expect(putMock).toHaveBeenCalledWith('http://mock/spaces/abc', {
         photoPath: '/cache/proofs/1001.jpg',
         signatureName: 'João da Silva',
       });
-      // 3. POST /complete
-      expect(postMock).toHaveBeenCalledWith('/deliveries/1001/complete');
+      // T100: mesmo UUID nos dois POSTs (item estável).
+      expect(postMock).toHaveBeenCalledWith(
+        '/deliveries/1001/complete',
+        {},
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Idempotency-Key': expect.stringMatching(/^[0-9a-f-]{36}$/),
+          }),
+        }),
+      );
+      const presignCall = postMock.mock.calls[0];
+      const completeCall = postMock.mock.calls[1];
+      const presignKey = (presignCall[2] as { headers: Record<string, string> }).headers['Idempotency-Key'];
+      const completeKey = (completeCall[2] as { headers: Record<string, string> }).headers['Idempotency-Key'];
+      expect(presignKey).toBe(completeKey);
       expect(postMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('passa idempotencyKey customizado via options', async () => {
+      const customKey = 'custom-key-12345';
+      jest.spyOn(apiClient, 'post')
+        .mockResolvedValueOnce({ data: { uploadUrl: 'http://mock/x' }, status: 200, statusText: 'OK', headers: {}, config: {} as never })
+        .mockResolvedValueOnce({ data: { ok: true }, status: 200, statusText: 'OK', headers: {}, config: {} as never });
+      jest.spyOn(apiClient, 'put').mockResolvedValue({ data: { ok: true }, status: 200, statusText: 'OK', headers: {}, config: {} as never });
+
+      const adapter = createProofUploadAdapter();
+      await adapter.uploadProof(
+        { deliveryId: 8888, photoPath: '/x.jpg', signaturePath: 'sig' },
+        { idempotencyKey: customKey },
+      );
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/deliveries/8888/proof-upload',
+        { signatureName: 'sig' },
+        { headers: { 'Idempotency-Key': customKey } },
+      );
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/deliveries/8888/complete',
+        {},
+        { headers: { 'Idempotency-Key': customKey } },
+      );
     });
 
     it('lança erro se /proof-upload não retornar uploadUrl', async () => {
@@ -140,9 +183,16 @@ describe('boot wiring (T104)', () => {
         signaturePath: 'tester',
       });
 
-      expect(fakeHttp.post).toHaveBeenCalledWith('/deliveries/9999/proof-upload', {
-        signatureName: 'tester',
-      });
+      // T100: Idempotency-Key também é gerado em http customizado.
+      expect(fakeHttp.post).toHaveBeenCalledWith(
+        '/deliveries/9999/proof-upload',
+        { signatureName: 'tester' },
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Idempotency-Key': expect.any(String),
+          }),
+        }),
+      );
       expect(fakeHttp.put).toHaveBeenCalledWith('http://test/presigned', {
         photoPath: '/test.jpg',
         signatureName: 'tester',
