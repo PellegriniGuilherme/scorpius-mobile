@@ -76,6 +76,7 @@ const config: ExpoConfig = {
   plugins: [
     'expo-secure-store',
     'expo-sqlite',
+    'expo-asset',
     'expo-localization',
     // T080: expo-notifications com icon e color
     [
