@@ -49,6 +49,11 @@ export interface OutboxItem {
   last_error: string | null;
   created_at: number;
   updated_at: number;
+  /**
+   * T100: chave idempotente estável por item. Estabelecida no enqueue e
+   * preservada em retries (não muda). Backend cacheia por TTL 24h.
+   */
+  idempotency_key: string;
 }
 
 interface OutboxRow {
@@ -60,10 +65,11 @@ interface OutboxRow {
   last_error: string | null;
   created_at: number;
   updated_at: number;
+  idempotency_key: string | null;
 }
 
 const DB_NAME = 'scorpius-move-outbox.db';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS outbox (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,6 +78,7 @@ const SCHEMA_SQL = `
     attempts INTEGER NOT NULL DEFAULT 0,
     next_retry_at INTEGER NOT NULL,
     last_error TEXT,
+    idempotency_key TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -95,7 +102,18 @@ export class OutboxService {
   private async doInit(): Promise<void> {
     const db = await SQLite.openDatabaseAsync(DB_NAME);
     await db.execAsync(SCHEMA_SQL);
-    // PRAGMA user_version para migrations futuras (não usadas em v1).
+    // T100 migration v1 → v2: adiciona coluna idempotency_key.
+    const currentVersion = await db.getFirstAsync<{ user_version: number }>(
+      'PRAGMA user_version',
+    );
+    if ((currentVersion?.user_version ?? 0) < 2) {
+      try {
+        await db.execAsync('ALTER TABLE outbox ADD COLUMN idempotency_key TEXT');
+      } catch {
+        // Column already exists.
+      }
+      await db.execAsync('PRAGMA user_version = 2');
+    }
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     this.db = db;
   }
@@ -103,15 +121,28 @@ export class OutboxService {
   /**
    * Enfileira um novo item. Retorna o id gerado.
    */
-  async enqueue(type: OutboxType, payload: Record<string, unknown>): Promise<number> {
+  async enqueue(
+    type: OutboxType,
+    payload: Record<string, unknown>,
+    options?: { idempotencyKey?: string },
+  ): Promise<number> {
     await this.init();
     const db = this.requireDb();
     const now = Date.now();
+    // T100: gera UUID v4 automaticamente. Pode ser override via options
+    // (usado em testes para controle determinístico).
+    const idempotencyKey = options?.idempotencyKey ?? crypto.randomUUID();
     const stmt = await db.prepareAsync(
-      `INSERT INTO outbox (type, payload, attempts, next_retry_at, last_error, created_at, updated_at)
-       VALUES (?, ?, 0, 0, NULL, ?, ?)`,
+      `INSERT INTO outbox (type, payload, attempts, next_retry_at, last_error, idempotency_key, created_at, updated_at)
+       VALUES (?, ?, 0, 0, NULL, ?, ?, ?)`,
     );
-    const result = await stmt.executeAsync([type, JSON.stringify(payload), now, now]);
+    const result = await stmt.executeAsync([
+      type,
+      JSON.stringify(payload),
+      idempotencyKey,
+      now,
+      now,
+    ]);
     await stmt.finalizeAsync();
     return result.lastInsertRowId;
   }
@@ -157,7 +188,7 @@ export class OutboxService {
     const db = this.requireDb();
     const now = Date.now();
     const stmt = await db.prepareAsync(
-      `SELECT id, type, payload, attempts, next_retry_at, last_error, created_at, updated_at
+      `SELECT id, type, payload, attempts, next_retry_at, last_error, idempotency_key, created_at, updated_at
        FROM outbox
        WHERE next_retry_at <= ?
        ORDER BY created_at ASC
@@ -178,7 +209,7 @@ export class OutboxService {
     await this.init();
     const db = this.requireDb();
     const stmt = await db.prepareAsync(
-      `SELECT id, type, payload, attempts, next_retry_at, last_error, created_at, updated_at
+      `SELECT id, type, payload, attempts, next_retry_at, last_error, idempotency_key, created_at, updated_at
        FROM outbox
        ORDER BY created_at DESC`,
     );
@@ -211,7 +242,7 @@ export class OutboxService {
     await this.init();
     const db = this.requireDb();
     const stmt = await db.prepareAsync(
-      `SELECT id, type, payload, attempts, next_retry_at, last_error, created_at, updated_at
+      `SELECT id, type, payload, attempts, next_retry_at, last_error, idempotency_key, created_at, updated_at
        FROM outbox
        WHERE next_retry_at = 0 AND attempts >= ?
        ORDER BY created_at DESC`,
@@ -289,6 +320,9 @@ function rowToItem(row: OutboxRow): OutboxItem {
     last_error: row.last_error,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    // T100: rows antigos (pré-migration) podem ter null — geramos key
+    // ad-hoc para compatibilidade. SyncWorker sempre usa item.idempotency_key.
+    idempotency_key: row.idempotency_key ?? crypto.randomUUID(),
   };
 }
 

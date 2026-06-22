@@ -13,7 +13,7 @@
  *  - tick() respeita AppState: se inativa, não processa
  *  - syncWorker singleton
  */
-import { SyncWorker, type ApiClient } from './SyncWorker';
+import { SyncWorker, type ApiClient, syncWorker } from './SyncWorker';
 import { OutboxService } from './OutboxService';
 import { __resetMockDb } from '../../jest.sqlite-mock.js';
 
@@ -72,11 +72,16 @@ describe('SyncWorker', () => {
 
     const result = await worker.tick();
     expect(result).toBe(true);
-    expect(api.uploadProof).toHaveBeenCalledWith({
-      deliveryId: 1001,
-      photoPath: '/a.jpg',
-      signaturePath: 'João',
-    });
+    expect(api.uploadProof).toHaveBeenCalledWith(
+      {
+        deliveryId: 1001,
+        photoPath: '/a.jpg',
+        signaturePath: 'João',
+      },
+      expect.objectContaining({
+        idempotencyKey: expect.any(String),
+      }),
+    );
     // Item removido
     const items = await outbox.getAll();
     expect(items.find((i) => i.id === id)).toBeUndefined();
@@ -372,6 +377,56 @@ describe('SyncWorker boot wiring (T103 R-M3)', () => {
     // Verifica que item foi consumido (sucesso) e NÃO foi para retry
     const remaining = await freshOutbox.getAll();
     expect(remaining.find((i: { payload: { deliveryId: number } }) => i.payload.deliveryId === 9999)).toBeUndefined();
+
+    await freshOutbox.close();
+  });
+
+  // T100: idempotency-key deve ser estável por item em retries.
+  it('passa o mesmo idempotencyKey para uploadProof em retries', async () => {
+    const uploadCalls: Array<{ payload: unknown; options: unknown }> = [];
+    const api: ApiClient = {
+      uploadProof: jest.fn(async (payload, options) => {
+        uploadCalls.push({ payload, options });
+        // Falha 1ª vez (retry), sucesso 2ª.
+        if (uploadCalls.length < 2) {
+          throw new Error('temporary 500');
+        }
+      }),
+    };
+    syncWorker.setApiClient(api);
+
+    // Enfileira item com UUID determinístico (controle de teste)
+    const customKey = 'stable-uuid-1234';
+    const freshOutbox = new OutboxService();
+    await freshOutbox.init();
+    await freshOutbox.enqueue(
+      'proof_upload',
+      { deliveryId: 7777, photoPath: '/a.jpg', signaturePath: 'sig' },
+      { idempotencyKey: customKey },
+    );
+
+    // Tick 1: falha → markFailed com backoff 0 (immediate retry)
+    await freshOutbox.markFailed(
+      (await freshOutbox.getAll())[0].id,
+      'temp',
+      Date.now(),
+    );
+    await syncWorker.tick();
+    // Tick 2: sucesso → markDone
+    await freshOutbox.markFailed(
+      (await freshOutbox.getAll())[0].id,
+      'temp2',
+      Date.now(),
+    );
+    await syncWorker.tick();
+
+    // Verifica: as 2 chamadas tiveram o MESMO idempotencyKey (item estável).
+    expect(uploadCalls).toHaveLength(2);
+    expect((uploadCalls[0].options as { idempotencyKey: string }).idempotencyKey).toBe(customKey);
+    expect((uploadCalls[1].options as { idempotencyKey: string }).idempotencyKey).toBe(customKey);
+    // Item foi removido após sucesso do 2º tick (markDone).
+    const finalItems = await freshOutbox.getAll();
+    expect(finalItems.find((i) => i.payload.deliveryId === 7777)).toBeUndefined();
 
     await freshOutbox.close();
   });

@@ -24,22 +24,37 @@ import { syncWorker, type ApiClient, type ProofUploadPayload } from '@/services/
  */
 export function createProofUploadAdapter(http = apiClient): ApiClient {
   return {
-    async uploadProof(payload: ProofUploadPayload): Promise<void> {
+    async uploadProof(
+      payload: ProofUploadPayload,
+      options?: { idempotencyKey?: string },
+    ): Promise<void> {
+      // T100: header `Idempotency-Key` por item do outbox. Estável em retries
+      // → backend cacheia o response por 24h e dedup automaticamente.
+      // Se options.idempotencyKey não vier (legado), gera UUID v4 via crypto.randomUUID().
+      const idempotencyKey = options?.idempotencyKey ?? crypto.randomUUID();
+
       const presignRes = await http.post<{ uploadUrl: string }>(
         `/deliveries/${payload.deliveryId}/proof-upload`,
         { signatureName: payload.signaturePath },
+        { headers: { 'Idempotency-Key': idempotencyKey } },
       );
       const { uploadUrl } = presignRes.data;
       if (!uploadUrl) {
         throw new Error('proof-upload did not return uploadUrl');
       }
 
+      // PUT para Spaces (pre-signed) — sem idempotency-key (URL já é único).
       await http.put(uploadUrl, {
         photoPath: payload.photoPath,
         signatureName: payload.signaturePath,
       });
 
-      await http.post(`/deliveries/${payload.deliveryId}/complete`);
+      // POST /complete — mesma idempotency-key (evita double-complete).
+      await http.post(
+        `/deliveries/${payload.deliveryId}/complete`,
+        {},
+        { headers: { 'Idempotency-Key': idempotencyKey } },
+      );
     },
   };
 }

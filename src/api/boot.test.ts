@@ -79,17 +79,37 @@ describe('boot wiring (T104)', () => {
         signaturePath: 'João da Silva',
       });
 
-      // 1. POST /proof-upload
-      expect(postMock).toHaveBeenCalledWith('/deliveries/1001/proof-upload', {
-        signatureName: 'João da Silva',
-      });
+      // T100: POST /proof-upload envia header Idempotency-Key UUID v4.
+      expect(postMock).toHaveBeenCalledWith(
+        '/deliveries/1001/proof-upload',
+        { signatureName: 'João da Silva' },
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Idempotency-Key': expect.stringMatching(/^[0-9a-f-]{36}$/),
+          }),
+        }),
+      );
       // 2. PUT pre-signed URL
       expect(putMock).toHaveBeenCalledWith('http://mock/spaces/abc', {
         photoPath: '/cache/proofs/1001.jpg',
         signatureName: 'João da Silva',
       });
-      // 3. POST /complete
-      expect(postMock).toHaveBeenCalledWith('/deliveries/1001/complete');
+      // T100: POST /complete também envia Idempotency-Key (mesma key).
+      expect(postMock).toHaveBeenCalledWith(
+        '/deliveries/1001/complete',
+        {},
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Idempotency-Key': expect.stringMatching(/^[0-9a-f-]{36}$/),
+          }),
+        }),
+      );
+      // T100: mesma UUID nos 2 POSTs (item estável).
+      const presignCall = postMock.mock.calls[0];
+      const completeCall = postMock.mock.calls[1];
+      const presignKey = (presignCall[2] as { headers: Record<string, string> }).headers['Idempotency-Key'];
+      const completeKey = (completeCall[2] as { headers: Record<string, string> }).headers['Idempotency-Key'];
+      expect(presignKey).toBe(completeKey);
       expect(postMock).toHaveBeenCalledTimes(2);
     });
 
@@ -140,9 +160,16 @@ describe('boot wiring (T104)', () => {
         signaturePath: 'tester',
       });
 
-      expect(fakeHttp.post).toHaveBeenCalledWith('/deliveries/9999/proof-upload', {
-        signatureName: 'tester',
-      });
+      // T100: Idempotency-Key também é gerado em http customizado.
+      expect(fakeHttp.post).toHaveBeenCalledWith(
+        '/deliveries/9999/proof-upload',
+        { signatureName: 'tester' },
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Idempotency-Key': expect.any(String),
+          }),
+        }),
+      );
       expect(fakeHttp.put).toHaveBeenCalledWith('http://test/presigned', {
         photoPath: '/test.jpg',
         signatureName: 'tester',

@@ -70,14 +70,28 @@ describe('SyncWorker E2E integration (T106 — R-M3)', () => {
     const processed = await syncWorker.tick();
     expect(processed).toBe(true);
 
-    expect(postSpy).toHaveBeenCalledWith('/deliveries/1001/proof-upload', {
-      signatureName: 'João da Silva',
-    });
+    expect(postSpy).toHaveBeenCalledWith(
+      '/deliveries/1001/proof-upload',
+      { signatureName: 'João da Silva' },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Idempotency-Key': expect.stringMatching(/^[0-9a-f-]{36}$/),
+        }),
+      }),
+    );
     expect(putSpy).toHaveBeenCalledWith('http://mock-spaces/upload/abc', {
       photoPath: '/cache/proofs/1001.jpg',
       signatureName: 'João da Silva',
     });
-    expect(postSpy).toHaveBeenCalledWith('/deliveries/1001/complete');
+    expect(postSpy).toHaveBeenCalledWith(
+      '/deliveries/1001/complete',
+      {},
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Idempotency-Key': expect.stringMatching(/^[0-9a-f-]{36}$/),
+        }),
+      }),
+    );
 
     const after = await freshOutbox.getAll();
     expect(after.find((i) => i.id === id)).toBeUndefined();
@@ -194,13 +208,33 @@ describe('SyncWorker E2E integration (T106 — R-M3)', () => {
       signaturePath: 'custom',
     });
 
-    expect(fakeHttp.post).toHaveBeenCalledWith('/deliveries/7777/proof-upload', {
-      signatureName: 'custom',
-    });
+    expect(fakeHttp.post).toHaveBeenCalledWith(
+      '/deliveries/7777/proof-upload',
+      { signatureName: 'custom' },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Idempotency-Key': expect.any(String),
+        }),
+      }),
+    );
     expect(fakeHttp.put).toHaveBeenCalledWith('http://test/x', {
       photoPath: '/custom.jpg',
       signatureName: 'custom',
     });
-    expect(fakeHttp.post).toHaveBeenCalledWith('/deliveries/7777/complete');
+    expect(fakeHttp.post).toHaveBeenCalledWith(
+      '/deliveries/7777/complete',
+      {},
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Idempotency-Key': expect.any(String),
+        }),
+      }),
+    );
+
+    // T100: mesma key nos dois POSTs (item estável).
+    const calls = (fakeHttp.post as jest.Mock).mock.calls;
+    const presignKey = (calls[0][2] as { headers: Record<string, string> }).headers['Idempotency-Key'];
+    const completeKey = (calls[1][2] as { headers: Record<string, string> }).headers['Idempotency-Key'];
+    expect(presignKey).toBe(completeKey);
   });
 });
