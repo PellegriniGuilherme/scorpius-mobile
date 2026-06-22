@@ -20,6 +20,17 @@ import { isValidOtpCode } from './OtpScreen.validation';
 type Nav = RouteProp<AuthStackParamList, 'Otp'>;
 
 const RESEND_COOLDOWN_SEC = 30;
+const DEFAULT_OTP_TTL_SEC = 300; // 5min (T101 backend retorna expires_in)
+
+/**
+ * Formata segundos em m:ss (ex: 300 → "5:00", 119 → "1:59", 9 → "0:09").
+ */
+function formatCountdown(totalSec: number): string {
+  const safe = Math.max(0, totalSec);
+  const m = Math.floor(safe / 60);
+  const s = safe % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 export function OtpScreen() {
   const route = useRoute<Nav>();
@@ -33,9 +44,15 @@ export function OtpScreen() {
   const [resendIn, setResendIn] = useState(RESEND_COOLDOWN_SEC);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // T101: countdown OTP TTL (5min default). Lido de route.params.expiresIn.
+  const initialTtl = route.params?.expiresIn ?? DEFAULT_OTP_TTL_SEC;
+  const [expiresIn, setExpiresIn] = useState(initialTtl);
+  const otpExpired = expiresIn <= 0;
+
   useEffect(() => {
     timerRef.current = setInterval(() => {
       setResendIn((prev) => (prev > 0 ? prev - 1 : 0));
+      setExpiresIn((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -101,14 +118,35 @@ export function OtpScreen() {
             label={submitting ? ptBR.otp.submitting : ptBR.otp.submit}
             onPress={handleSubmit}
             loading={submitting}
-            disabled={!isValidOtpCode(code)}
+            disabled={!isValidOtpCode(code) || otpExpired}
             fullWidth
           />
+          {/* T101: countdown OTP TTL + estado expirado */}
+          {!otpExpired && (
+            <Text
+              testID="otp-countdown"
+              accessibilityLabel={`Tempo restante: ${Math.ceil(expiresIn / 60)} minutos`}
+              style={{ color: colors.textMuted, fontSize: tokens.text.sm, textAlign: 'center' }}
+            >
+              {ptBR.otp.expiresIn.replace('{time}', formatCountdown(expiresIn))}
+            </Text>
+          )}
+          {otpExpired && (
+            <Text
+              testID="otp-expired"
+              style={{ color: colors.statusDangerText, fontSize: tokens.text.sm, textAlign: 'center' }}
+            >
+              {ptBR.otp.expired}
+            </Text>
+          )}
           <Button
+            testID="otp-resend"
             label={resendIn > 0 ? ptBR.otp.resendIn.replace('{seconds}', String(resendIn)) : ptBR.otp.resend}
             onPress={() => {
               // TODO F2 Mobile: re-chamar requestOtp
               setResendIn(RESEND_COOLDOWN_SEC);
+              // T101: reset OTP TTL quando reenvia código
+              setExpiresIn(DEFAULT_OTP_TTL_SEC);
             }}
             variant="ghost"
             disabled={resendIn > 0}

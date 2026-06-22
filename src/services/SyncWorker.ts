@@ -180,7 +180,6 @@ export class SyncWorker {
       }
       const payload = item.payload as unknown as ProofUploadPayload;
       // T100: passa idempotencyKey estável por item (backend cacheia por TTL).
-      // Mesmo em retries, a key não muda → backend dedup automaticamente.
       await this.api.uploadProof(payload, { idempotencyKey: item.idempotency_key });
       await this.outboxSvc.markDone(item.id);
     } catch (err) {

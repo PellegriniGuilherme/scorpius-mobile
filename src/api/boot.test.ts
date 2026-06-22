@@ -79,7 +79,7 @@ describe('boot wiring (T104)', () => {
         signaturePath: 'João da Silva',
       });
 
-      // T100: Idempotency-Key UUID v4 no POST /proof-upload.
+      // T100: POST /proof-upload envia header Idempotency-Key UUID v4.
       expect(postMock).toHaveBeenCalledWith(
         '/deliveries/1001/proof-upload',
         { signatureName: 'João da Silva' },
@@ -89,11 +89,12 @@ describe('boot wiring (T104)', () => {
           }),
         }),
       );
+      // 2. PUT pre-signed URL
       expect(putMock).toHaveBeenCalledWith('http://mock/spaces/abc', {
         photoPath: '/cache/proofs/1001.jpg',
         signatureName: 'João da Silva',
       });
-      // T100: mesmo UUID nos dois POSTs (item estável).
+      // T100: POST /complete também envia Idempotency-Key (mesma key).
       expect(postMock).toHaveBeenCalledWith(
         '/deliveries/1001/complete',
         {},
@@ -103,6 +104,7 @@ describe('boot wiring (T104)', () => {
           }),
         }),
       );
+      // T100: mesma UUID nos 2 POSTs (item estável).
       const presignCall = postMock.mock.calls[0];
       const completeCall = postMock.mock.calls[1];
       const presignKey = (presignCall[2] as { headers: Record<string, string> }).headers['Idempotency-Key'];

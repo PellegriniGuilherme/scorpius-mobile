@@ -54,6 +54,16 @@ class MockDatabase {
     return Promise.resolve(new MockStatement(source, this));
   }
 
+  /**
+   * T100: helper para `PRAGMA user_version` etc. Retorna a primeira linha
+   * do SELECT (ou null se vazio). Usado por OutboxService.init para
+   * detectar migrations pendentes.
+   */
+  getFirstAsync(source) {
+    const stmt = new MockStatement(source, this);
+    return stmt.executeAsync([]).then((res) => res.getFirstAsync());
+  }
+
   closeAsync() {
     this.tables.clear();
     this.nextId = 1;
@@ -76,6 +86,15 @@ class MockDatabase {
     }
     if (upper.startsWith('SELECT')) {
       return this.execSelect(sql, params);
+    }
+    if (upper.startsWith('PRAGMA')) {
+      // T100: PRAGMA user_version sempre retorna 0 (reset entre testes).
+      return {
+        lastInsertRowId: 0,
+        changes: 0,
+        getAllAsync: async () => [{ user_version: 0 }],
+        getFirstAsync: async () => ({ user_version: 0 }),
+      };
     }
     throw new Error(`SQL not supported by mock: ${sql}`);
   }
@@ -186,6 +205,7 @@ class MockDatabase {
       lastInsertRowId: 0,
       changes: 0,
       getAllAsync: async () => [{ c: filtered.length }],
+      getFirstAsync: async () => filtered.length,
     };
   }
 
@@ -231,6 +251,7 @@ class MockDatabase {
       lastInsertRowId: 0,
       changes: 0,
       getAllAsync: async () => result,
+      getFirstAsync: async () => result[0] ?? null,
     };
   }
 }

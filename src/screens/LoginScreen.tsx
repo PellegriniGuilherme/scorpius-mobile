@@ -39,8 +39,14 @@ export function LoginScreen() {
     setSubmitting(true);
     try {
       const deviceId = 'move-app'; // TODO F2 Mobile: identifier per device
-      await requestOtp(`+${trimmed}`, deviceId);
-      navigation.navigate('Otp', { phone: `+${trimmed}` });
+      // T101: response.expires_in (TTL do OTP em segundos) é passado ao OtpScreen
+        // para renderizar countdown regressivo. Default 300 (5min) no OtpScreen
+        // se backend não retornar.
+        const response = await requestOtp(`+${trimmed}`, deviceId);
+        navigation.navigate('Otp', {
+          phone: `+${trimmed}`,
+          expiresIn: response.expires_in,
+        });
     } catch {
       setError(ptBR.login.errorGeneric);
     } finally {

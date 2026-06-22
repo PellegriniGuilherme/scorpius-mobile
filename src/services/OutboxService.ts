@@ -103,9 +103,6 @@ export class OutboxService {
     const db = await SQLite.openDatabaseAsync(DB_NAME);
     await db.execAsync(SCHEMA_SQL);
     // T100 migration v1 → v2: adiciona coluna idempotency_key.
-    // Para DBs existentes (criados em versão anterior), ALTER TABLE
-    // adiciona a coluna sem perder dados. SQLite ignora se já existir
-    // (try/catch em torno de duplicate-column error).
     const currentVersion = await db.getFirstAsync<{ user_version: number }>(
       'PRAGMA user_version',
     );
@@ -113,7 +110,7 @@ export class OutboxService {
       try {
         await db.execAsync('ALTER TABLE outbox ADD COLUMN idempotency_key TEXT');
       } catch {
-        // Column already exists (race condition safe).
+        // Column already exists.
       }
       await db.execAsync('PRAGMA user_version = 2');
     }
@@ -136,6 +133,8 @@ export class OutboxService {
     await this.init();
     const db = this.requireDb();
     const now = Date.now();
+    // T100: gera UUID v4 automaticamente. Pode ser override via options
+    // (usado em testes para controle determinístico).
     const idempotencyKey = options?.idempotencyKey ?? crypto.randomUUID();
     const stmt = await db.prepareAsync(
       `INSERT INTO outbox (type, payload, attempts, next_retry_at, last_error, idempotency_key, created_at, updated_at)
