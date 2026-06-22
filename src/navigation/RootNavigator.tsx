@@ -22,6 +22,7 @@ import { ComprovanteScreen } from '@/screens/ComprovanteScreen';
 import { PerfilMotoristaScreen } from '@/screens/PerfilMotoristaScreen';
 import { useAuthStore } from '@/store/auth';
 import { useTheme } from '@/theme/ThemeProvider';
+import { setupSyncWorker } from '@/api/boot';
 import type { AuthStackParamList, AppStackParamList } from './types';
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -52,7 +53,10 @@ type PreviewScreen = 'login' | 'otp' | 'home' | 'detalhe' | 'mapa' | 'comprovant
 
 function readPreviewFromUrl(): PreviewScreen | null {
   if (typeof window === 'undefined') return null;
-  const params = new URLSearchParams(window.location.search);
+  // jsdom (jest) define `window` mas `window.location` pode ser undefined —
+  // defendemos para não quebrar testes. Em browser real, sempre tem search.
+  const search = (window as { location?: { search?: string } }).location?.search ?? '';
+  const params = new URLSearchParams(search);
   const v = params.get('preview');
   const valid: PreviewScreen[] = ['login', 'otp', 'home', 'detalhe', 'mapa', 'comprovante', 'perfil'];
   return valid.includes((v ?? '') as PreviewScreen) ? (v as PreviewScreen) : null;
@@ -122,6 +126,9 @@ export function RootNavigator() {
 
   useEffect(() => {
     void bootstrap();
+    // T103 R-M3: wire-up do SyncWorker no boot. Sem isso, todo upload fica
+    // preso no outbox (api = null → "api client not configured" → retry loop).
+    setupSyncWorker();
   }, [bootstrap]);
 
   const previewScreen = useMemo(() => readPreviewFromUrl(), []);

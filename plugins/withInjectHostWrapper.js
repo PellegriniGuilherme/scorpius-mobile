@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-require-imports, no-console */
+// CommonJS script (Expo config plugin) — não parte do bundle da app.
+// console.log é usado para feedback em `eas build` logs.
 const { withDangerousMod } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');

@@ -172,16 +172,15 @@ import * as mockSqlite from './jest.sqlite-mock.js';
 jest.mock('expo-sqlite', () => mockSqlite);
 
 // --- expo-file-system: mock minimalista (T068.5 — instalado).
+// Mock da API v18+: funções top-level (cacheDirectory, makeDirectoryAsync, copyAsync).
 jest.mock('expo-file-system', () => ({
-  Paths: { cache: { uri: 'file:///cache/' } },
-  Directory: jest.fn().mockImplementation((uri: string) => ({
-    uri,
-    create: jest.fn().mockResolvedValue(undefined),
-  })),
-  File: jest.fn().mockImplementation((uri: string) => ({
-    uri,
-    copy: jest.fn().mockResolvedValue(undefined),
-  })),
+  cacheDirectory: 'file:///cache/',
+  makeDirectoryAsync: jest.fn().mockResolvedValue(undefined),
+  copyAsync: jest.fn().mockResolvedValue(undefined),
+  writeAsStringAsync: jest.fn().mockResolvedValue(undefined),
+  readAsStringAsync: jest.fn().mockResolvedValue(''),
+  deleteAsync: jest.fn().mockResolvedValue(undefined),
+  getInfoAsync: jest.fn().mockResolvedValue({ exists: true, isDirectory: false }),
 }));
 
 // --- @react-native-community/netinfo: mock (T068.5 — instalado).

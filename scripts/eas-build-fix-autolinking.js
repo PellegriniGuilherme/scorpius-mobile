@@ -1,8 +1,6 @@
-// EAS Build autolinking patch for Expo SDK 52
-// Fixes: expo.core.ExpoModulesPackage -> expo.modules.ExpoModulesPackage
-// The autolinking generates a wrong package path for the `expo` module
-// in SDK 52 with new arch enabled.
-
+/* eslint-disable @typescript-eslint/no-require-imports, no-console */
+// CommonJS script (EAS build fix) — rodado em CI/build, não em runtime.
+// console.log é usado para debug em `eas build` logs.
 const fs = require('fs');
 const path = require('path');
 

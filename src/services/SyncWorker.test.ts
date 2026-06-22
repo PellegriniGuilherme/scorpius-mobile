@@ -311,3 +311,62 @@ describe('SyncWorker', () => {
     worker.stop();
   });
 });
+
+// ---------------------------------------------------------------------------
+// T103 R-M3: boot wiring garante que SyncWorker tem ApiClient no boot.
+// Sem essa wiring, todo upload do outbox fica em retry loop infinito.
+// ---------------------------------------------------------------------------
+
+describe('SyncWorker boot wiring (T103 R-M3)', () => {
+  // Mock axios ANTES de qualquer import (api/boot importa api/client que usa axios)
+  jest.mock('@/api/client', () => ({
+    apiClient: {
+      post: jest.fn().mockResolvedValue({ data: { uploadUrl: 'http://mock/spaces/abc' } }),
+      put: jest.fn().mockResolvedValue({ status: 200 }),
+      get: jest.fn(),
+      interceptors: { request: { use: jest.fn() }, response: { use: jest.fn() } },
+    },
+    loadAccessToken: jest.fn().mockResolvedValue(null),
+    setAccessToken: jest.fn().mockResolvedValue(undefined),
+    registerSessionExpiredHandler: jest.fn(),
+  }));
+
+  it('setupSyncWorker() injeta ApiClient no SyncWorker singleton e é idempotente', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { setupSyncWorker, _resetSyncWorkerBootForTests } = require('@/api/boot');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { syncWorker } = require('@/services/SyncWorker');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { OutboxService } = require('@/services/OutboxService');
+
+    _resetSyncWorkerBootForTests();
+
+    // Act: chama 3x (deve ser idempotente)
+    setupSyncWorker();
+    setupSyncWorker();
+    setupSyncWorker();
+
+    // Assert: syncWorker recebeu o api client (proxy: enqueue + tick não
+    // devem entrar em retry loop com "api client not configured")
+    const freshOutbox = new OutboxService();
+    await freshOutbox.init();
+    await freshOutbox.enqueue('proof_upload', {
+      deliveryId: 9999,
+      photoPath: '/tmp/x.jpg',
+      signaturePath: 'test',
+    });
+    const item = await freshOutbox.next();
+    expect(item).not.toBeNull();
+
+    // Se api foi injetado, tick vai tentar upload (mock) → markDone
+    // Se api NÃO foi injetado, tick faria markFailed com "api client not configured"
+    const processed = await syncWorker.tick();
+    expect(processed).toBe(true);
+
+    // Verifica que item foi consumido (sucesso) e NÃO foi para retry
+    const remaining = await freshOutbox.getAll();
+    expect(remaining.find((i: { payload: { deliveryId: number } }) => i.payload.deliveryId === 9999)).toBeUndefined();
+
+    await freshOutbox.close();
+  });
+});
