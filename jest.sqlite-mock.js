@@ -34,8 +34,17 @@ class MockDatabase {
         if (match && !this.tables.has(match[1])) {
           this.tables.set(match[1], []);
         }
+      } else if (upper.startsWith('ALTER TABLE')) {
+        // T100: ALTER TABLE outbox ADD COLUMN idempotency_key TEXT
+        const m = stmt.match(/ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)/i);
+        if (m) {
+          const table = this.tables.get(m[1]);
+          if (table && table.rows.length > 0 && !(m[2] in table.rows[0])) {
+            for (const row of table.rows) row[m[2]] = null;
+          }
+        }
       } else if (upper.startsWith('PRAGMA')) {
-        // No-op
+        // No-op (incluindo PRAGMA user_version — não persistido entre testes)
       }
     }
     return Promise.resolve();

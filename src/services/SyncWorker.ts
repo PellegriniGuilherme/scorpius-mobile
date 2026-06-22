@@ -73,8 +73,12 @@ export interface ApiClient {
    *  2. PUT para Spaces
    *  3. POST /api/v1/deliveries/{id}/complete T072
    * Throws em caso de falha (network, 4xx, 5xx).
+   *
+   * T100: `options.idempotencyKey` é estável por item do outbox (mesma
+   * key em retries). Backend cacheia o response por TTL (24h).
+   * Adapter deve enviar como header `Idempotency-Key` no POST /proof-upload.
    */
-  uploadProof(payload: ProofUploadPayload): Promise<void>;
+  uploadProof(payload: ProofUploadPayload, options?: { idempotencyKey?: string }): Promise<void>;
 }
 
 export class SyncWorker {
@@ -175,7 +179,9 @@ export class SyncWorker {
         return;
       }
       const payload = item.payload as unknown as ProofUploadPayload;
-      await this.api.uploadProof(payload);
+      // T100: passa idempotencyKey estável por item (backend cacheia por TTL).
+      // Mesmo em retries, a key não muda → backend dedup automaticamente.
+      await this.api.uploadProof(payload, { idempotencyKey: item.idempotency_key });
       await this.outboxSvc.markDone(item.id);
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
