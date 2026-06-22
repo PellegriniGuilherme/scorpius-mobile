@@ -2,6 +2,30 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+// Expo SDK 52 autolinking fix: patch PackageList.java to use correct import
+tasks.register("patchAutolinkingPackageList") {
+    description = "Patches autolinking PackageList.java to fix expo.core -> expo.modules import"
+    doLast {
+        def packageList = file("${buildDir}/generated/autolinking/src/main/java/com/facebook/react/PackageList.java")
+        if (packageList.exists()) {
+            def content = packageList.text
+            def original = content
+            content = content.replace('import expo.core.ExpoModulesPackage;', 'import expo.modules.ExpoModulesPackage;')
+            content = content.replace('new ExpoModulesPackage()', 'new expo.modules.ExpoModulesPackage()')
+            if (content != original) {
+                packageList.text = content
+                println "[✅] Patched PackageList.java with correct ExpoModulesPackage path"
+            }
+        }
+    }
+}
+
+afterEvaluate {
+    tasks.matching { it.name.startsWith("compile") && it.name.endsWith("JavaWithJavac") }.configureEach {
+        dependsOn "patchAutolinkingPackageList"
+    }
+}
+
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
 /**
@@ -149,9 +173,6 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
-    // Expo SDK 52 fix
-    implementation project(":expo-modules-core")
-
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";
     def isWebpAnimatedEnabled = (findProperty('expo.webp.animated') ?: "") == "true";
