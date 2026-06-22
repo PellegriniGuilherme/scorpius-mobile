@@ -46,7 +46,9 @@ jest.mock('@react-navigation/native', () => {
 });
 
 // --- react-native: Animated helper ---
-jest.mock('react-native/Libraries/Animated/NativeAnimatedHelper', () => ({}), { virtual: true });
+// T115 SDK 56 + RN 0.85: caminho Libraries/Animated/ mudou para
+// Libraries/NativeAnimation/. jest-expo@56 já trata Animated via
+// setup próprio. Removido mock manual.
 
 // --- react-native-screens + native-stack ---
 // react-native-screens depende de Fabric/codegenNativeComponent que
@@ -172,15 +174,28 @@ import * as mockSqlite from './jest.sqlite-mock.js';
 jest.mock('expo-sqlite', () => mockSqlite);
 
 // --- expo-file-system: mock minimalista (T068.5 — instalado).
-// Mock da API v18+: funções top-level (cacheDirectory, makeDirectoryAsync, copyAsync).
+// T115 SDK 56: API reverteu para class API (Paths / File / Directory).
+// Mock alinhado com SDK 56 — helpers top-level removidos.
 jest.mock('expo-file-system', () => ({
-  cacheDirectory: 'file:///cache/',
-  makeDirectoryAsync: jest.fn().mockResolvedValue(undefined),
-  copyAsync: jest.fn().mockResolvedValue(undefined),
-  writeAsStringAsync: jest.fn().mockResolvedValue(undefined),
-  readAsStringAsync: jest.fn().mockResolvedValue(''),
-  deleteAsync: jest.fn().mockResolvedValue(undefined),
-  getInfoAsync: jest.fn().mockResolvedValue({ exists: true, isDirectory: false }),
+  Paths: {
+    cache: { uri: 'file:///cache/' },
+    document: { uri: 'file:///document/' },
+    bundle: { uri: 'file:///bundle/' },
+  },
+  File: jest.fn().mockImplementation((..._args: unknown[]) => ({
+    uri: 'file:///cache/mock.jpg',
+    text: jest.fn().mockResolvedValue(''),
+    write: jest.fn().mockResolvedValue(undefined),
+    copy: jest.fn().mockResolvedValue(undefined),
+    delete: jest.fn().mockResolvedValue(undefined),
+    exists: true,
+  })),
+  Directory: jest.fn().mockImplementation((..._args: unknown[]) => ({
+    uri: 'file:///cache/proofs/',
+    create: jest.fn().mockResolvedValue(undefined),
+    list: jest.fn().mockResolvedValue([]),
+    delete: jest.fn().mockResolvedValue(undefined),
+  })),
 }));
 
 // --- @react-native-community/netinfo: mock (T068.5 — instalado).

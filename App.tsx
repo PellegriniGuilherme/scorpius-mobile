@@ -8,6 +8,7 @@
  */
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import type { ReactElement } from 'react';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { RootNavigator } from '@/navigation/RootNavigator';
 
@@ -16,7 +17,8 @@ function ThemedStatusBar() {
   return <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />;
 }
 
-export default function App(): JSX.Element {
+// T115 SDK 56: React 19 — namespace JSX não é mais necessário (use ReactElement direto).
+export default function App(): ReactElement {
   return (
     <SafeAreaProvider>
       <ThemeProvider>

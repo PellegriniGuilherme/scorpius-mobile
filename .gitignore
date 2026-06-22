@@ -78,3 +78,8 @@ coverage/
 # Editor
 .vscode/
 *.swp
+
+# T115 + T095 H4: Native folders gerados por expo prebuild — não commitar.
+# Conteúdo é regenerado via `npx expo prebuild --clean`.
+ios/
+android/

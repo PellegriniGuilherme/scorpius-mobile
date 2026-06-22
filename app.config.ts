@@ -8,8 +8,7 @@ import type { ExpoConfig, ConfigContext } from 'expo/config';
  *  - `extra.apiUrl` é resolvido em runtime pelo `api/client.ts`
  *    via `Constants.expoConfig.extra.apiUrl`. Permite trocar o endpoint
  *    por build profile (development / preview / production) sem rebuild.
- *  - `newArchEnabled: true` (Fabric + TurboModules) — alinhado com
- *    Expo SDK 52 default.
+ *  - New Architecture (Fabric + TurboModules) default em SDK 56.
  *  - Plugin `expo-secure-store` para persistência do token driver.
  *  - `experiments.typedRoutes: true` para type-safety de rotas.
  *  - T080: lê API keys de `process.env` (definidos em `.env`).
@@ -25,11 +24,10 @@ const config: ExpoConfig = {
   orientation: 'portrait',
   scheme: 'scorpiusmove',
   userInterfaceStyle: 'automatic',
-  newArchEnabled: false,
-  splash: {
-    backgroundColor: '#0b1220',
-    resizeMode: 'contain',
-  },
+  // T115 SDK 56: New Architecture é default ON; newArchEnabled foi removido da ExpoConfig
+  // T115 SDK 56: top-level `splash` foi removido da ExpoConfig. Agora é
+  // específico por plataforma (web.splash para PWA). Native splash é
+  // controlado via `expo-splash-screen` plugin ou iOS/Android nativo.
   ios: {
     supportsTablet: true,
     // T082: bundle id internacional (decisão Guilherme 12:26)

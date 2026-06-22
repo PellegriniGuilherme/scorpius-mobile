@@ -106,18 +106,19 @@ function ComprovanteScreenInner({ delivery }: { delivery: NonNullable<ReturnType
       });
       if (result.canceled || !result.assets?.[0]) return;
       // Copia para cache local persistente (sobrevive a reload do app).
-      // expo-file-system v18+: usa funções top-level (cacheDirectory, makeDirectoryAsync, copyAsync).
+      // T115 SDK 56: expo-file-system reverteu para class API (Paths/File/Directory).
+      // Migration de v18 top-level functions → v17-style class API.
       const src = result.assets[0].uri;
-      const cacheRoot = FileSystem.cacheDirectory ?? '';
-      const proofsDir = `${cacheRoot}proofs/`;
-      const dst = `${proofsDir}${deliveryId}-${Date.now()}.jpg`;
+      const proofsDirInstance = new FileSystem.Directory(FileSystem.Paths.cache, 'proofs');
       try {
-        await FileSystem.makeDirectoryAsync(proofsDir, { intermediates: true });
+        await proofsDirInstance.create({ intermediates: true });
       } catch {
         // diretório já existe — no-op
       }
-      await FileSystem.copyAsync({ from: src, to: dst });
-      setPhotoPath(dst);
+      const srcFile = new FileSystem.File(src);
+      const dstFile = new FileSystem.File(proofsDirInstance, `${deliveryId}-${Date.now()}.jpg`);
+      await srcFile.copy(dstFile);
+      setPhotoPath(dstFile.uri);
     } finally {
       setCapturing(false);
     }

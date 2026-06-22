@@ -19,8 +19,14 @@ import { __resetMockDb } from '../../jest.sqlite-mock.js';
 
 // Mockar AppState isoladamente (mockar react-native inteiro
 // dispara TurboModule que não está disponível em jest).
+// T115 SDK 56 + RN 0.85 + jest-preset@0.85: o resolution de react-native
+// usa `require('./Libraries/AppState/AppState').default` (default export),
+// não named export. Mock precisa expor `__esModule: true` + `default`.
 jest.mock('react-native/Libraries/AppState/AppState', () => ({
-  addEventListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+  __esModule: true,
+  default: {
+    addEventListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+  },
 }));
 
 jest.mock('@react-native-community/netinfo', () => ({
