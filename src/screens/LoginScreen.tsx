@@ -8,6 +8,7 @@
  */
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '@/components/Button';
@@ -23,6 +24,7 @@ type Nav = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 export function LoginScreen() {
   const navigation = useNavigation<Nav>();
   const { colors, tokens } = useTheme();
+  const insets = useSafeAreaInsets();
   const [phone, setPhone] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +65,14 @@ export function LoginScreen() {
         contentContainerStyle={{
           flexGrow: 1,
           justifyContent: 'center',
-          padding: tokens.space[6],
+          paddingHorizontal: tokens.space[6],
+          // T121: insets aplicados no contentContainerStyle do ScrollView
+          // (não no KeyboardAvoidingView) porque o KAV sobrescreve
+          // paddingTop/Bottom internamente quando behavior='padding'.
+          // Em devices sem notch, insets são 0 e o comportamento é
+          // idêntico ao baseline.
+          paddingTop: tokens.space[6] + insets.top,
+          paddingBottom: tokens.space[6] + insets.bottom,
           gap: tokens.space[6],
         }}
         keyboardShouldPersistTaps="handled"

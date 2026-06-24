@@ -7,6 +7,7 @@
  */
 import { useState, useRef, useEffect } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
@@ -36,6 +37,7 @@ export function OtpScreen() {
   const route = useRoute<Nav>();
   const navigation = useNavigation();
   const { colors, tokens } = useTheme();
+  const insets = useSafeAreaInsets();
   const setSession = useAuthStore((s) => s.setSession);
 
   const [code, setCode] = useState('');
@@ -88,7 +90,13 @@ export function OtpScreen() {
         contentContainerStyle={{
           flexGrow: 1,
           justifyContent: 'center',
-          padding: tokens.space[6],
+          paddingHorizontal: tokens.space[6],
+          // T121: insets aplicados no contentContainerStyle do ScrollView
+          // (não no KeyboardAvoidingView) porque o KAV sobrescreve
+          // paddingTop/Bottom internamente quando behavior='padding'.
+          // Em devices sem notch, insets são 0.
+          paddingTop: tokens.space[6] + insets.top,
+          paddingBottom: tokens.space[6] + insets.bottom,
           gap: tokens.space[6],
         }}
         keyboardShouldPersistTaps="handled"
