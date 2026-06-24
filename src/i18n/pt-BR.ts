@@ -19,6 +19,10 @@ export const ptBR = {
     submitting: 'Enviando...',
     errorInvalidPhone: 'Informe um número de WhatsApp válido.',
     errorGeneric: 'Não foi possível enviar o código. Tente novamente.',
+    // T122: gate check-phone retornou exists=false. Motorista NÃO se cadastra
+    // via app — empresa precisa provisionar antes do login.
+    errorAccessNotAllowed:
+      'Acesso não liberado. Entre em contato com sua transportadora.',
   },
   otp: {
     title: 'Confirme o código',

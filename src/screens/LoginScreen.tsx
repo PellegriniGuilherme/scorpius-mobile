@@ -1,10 +1,14 @@
 /**
- * Scorpius Move — Login (OTP request) screen.
+ * Scorpius Move — Login (phone + OTP) screen.
  *
- * Fluxo:
+ * Fluxo (T122 — gate de check-phone):
  *  1. Usuário informa WhatsApp
- *  2. App chama /driver/auth/otp
- *  3. Navega para OtpScreen com o phone em route params
+ *  2. App chama `GET /driver/check-phone?phone=+55...`
+ *     a. exists=true  → chama `requestOtp()` → navega para OtpScreen
+ *     b. exists=false → mostra erro inline "Acesso não liberado..."
+ *        (motorista NÃO se cadastra via app — empresa provisiona)
+ *     c. 422 (phone inválido) → mostra erro de telefone
+ *  3. OtpScreen confirma código via `POST /driver/auth/confirm`
  */
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
@@ -13,7 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
-import { requestOtp } from '@/api/auth';
+import { checkPhone, requestOtp } from '@/api/auth';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
 import type { AuthStackParamList } from '@/navigation/types';
@@ -32,6 +36,12 @@ export function LoginScreen() {
   const trimmed = phone.replace(/\D/g, '');
   const isValid = validateWhatsappInput(phone);
 
+  /**
+   * T122 — gate check-phone.
+   * Backend decide se motorista existe antes de prosseguir.
+   * exists=true → requestOtp → OtpScreen
+   * exists=false → erro inline "Acesso não liberado" (sem navegação)
+   */
   async function handleSubmit() {
     if (!isValid) {
       setError(ptBR.login.errorInvalidPhone);
@@ -41,16 +51,40 @@ export function LoginScreen() {
     setSubmitting(true);
     try {
       const deviceId = 'move-app'; // TODO F2 Mobile: identifier per device
-      // T101: response.expires_in (TTL do OTP em segundos) é passado ao OtpScreen
-        // para renderizar countdown regressivo. Default 300 (5min) no OtpScreen
-        // se backend não retornar.
-        const response = await requestOtp(`+${trimmed}`, deviceId);
-        navigation.navigate('Otp', {
-          phone: `+${trimmed}`,
-          expiresIn: response.expires_in,
-        });
-    } catch {
-      setError(ptBR.login.errorGeneric);
+      const formattedPhone = `+${trimmed}`;
+
+      // T122: gate de fluxo. Bloqueia motorista não-cadastrado ANTES de
+      // disparar OTP (evita gasto de SMS/disparo e mostra mensagem
+      // acionável ao usuário).
+      const check = await checkPhone(formattedPhone);
+
+      if (!check.exists) {
+        // exists=false: motorista não cadastrado. Empresa precisa provisionar.
+        // NÃO chama requestOtp, NÃO navega.
+        setError(ptBR.login.errorAccessNotAllowed);
+        return;
+      }
+
+      // exists=true: prossegue com o fluxo OTP original.
+      // T101: response.expires_in (TTL do OTP em segundos) é passado ao
+      // OtpScreen para renderizar countdown regressivo.
+      const response = await requestOtp(formattedPhone, deviceId);
+      navigation.navigate('Otp', {
+        phone: formattedPhone,
+        expiresIn: response.expires_in,
+      });
+    } catch (err) {
+      // T122: 422 do check-phone (phone mal formatado) → erro de validação.
+      if (
+        typeof err === 'object' &&
+        err !== null &&
+        'response' in err &&
+        (err as { response?: { status?: number } }).response?.status === 422
+      ) {
+        setError(ptBR.login.errorInvalidPhone);
+      } else {
+        setError(ptBR.login.errorGeneric);
+      }
     } finally {
       setSubmitting(false);
     }
