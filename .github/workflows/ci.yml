@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fetch-openapi:
+    name: Fetch OpenAPI Spec
+    runs-on: ubuntu-22.04
+    outputs:
+      spec_hash: ${{ steps.fetch.outputs.spec_hash }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch OpenAPI spec from API repo
+        id: fetch
+        run: |
+          curl -sL https://raw.githubusercontent.com/PellegriniGuilherme/scorpius-api/main/docs/openapi-driver-mobile.yml \
+            -o docs/openapi-driver-mobile.yml
+          echo "spec_hash=$(sha256sum docs/openapi-driver-mobile.yml | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+
+      - name: Upload spec artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-spec-mobile
+          path: docs/openapi-driver-mobile.yml
+          retention-days: 1
+
+  lint-and-test:
+    name: Lint + Tests (Jest)
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch OpenAPI spec
+        run: |
+          curl -sL https://raw.githubusercontent.com/PellegriniGuilherme/scorpius-api/main/docs/openapi-driver-mobile.yml \
+            -o docs/openapi-driver-mobile.yml
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Expo install --check
+        run: npx expo install --check
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Jest tests
+        run: npm run test
+
+  eas-build-android:
+    name: EAS Build (Android)
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch OpenAPI spec
+        run: |
+          curl -sL https://raw.githubusercontent.com/PellegriniGuilherme/scorpius-api/main/docs/openapi-driver-mobile.yml \
+            -o docs/openapi-driver-mobile.yml
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup EAS
+        env:
+          EAS_BUILD_CONTEXT: ${{ toJson(github) }}
+        run: |
+          npm install -g eas-cli
+          eas build --platform android \
+            --non-interactive \
+            --no-wait \
+            --message "GitHub Actions build from ${{ github.sha }}"
+
+  eas-build-ios:
+    name: EAS Build (iOS)
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch OpenAPI spec
+        run: |
+          curl -sL https://raw.githubusercontent.com/PellegriniGuilherme/scorpius-api/main/docs/openapi-driver-mobile.yml \
+            -o docs/openapi-driver-mobile.yml
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup EAS
+        env:
+          EAS_BUILD_CONTEXT: ${{ toJson(github) }}
+        run: |
+          npm install -g eas-cli
+          eas build --platform ios \
+            --non-interactive \
+            --no-wait \
+            --message "GitHub Actions build from ${{ github.sha }}"
