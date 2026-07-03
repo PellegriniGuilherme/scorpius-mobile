@@ -169,6 +169,13 @@ pnpm eas:build:dev          # eas build --profile development --platform android
 
 ---
 
+## Documentação para agentes (IA)
+
+- [`docs/agent/README.md`](./docs/agent/README.md) — índice
+- [`docs/agent/MOVE.md`](./docs/agent/MOVE.md) — referência rápida do app
+- Mapa do sistema: `vulcan/scorpius/docs/agent/SYSTEM-MAP.md`
+- Lacunas: `vulcan/scorpius/docs/agent/GAPS.md`
+
 ## Próximas Tasks
 
 - **T068.2** — jest-expo config + cobertura
