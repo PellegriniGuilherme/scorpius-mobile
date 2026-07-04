@@ -1,0 +1,10 @@
+appId: com.scorpius.move
+---
+# Smoke E2E — login OTP (requer backend staging + driver seed)
+- launchApp
+- assertVisible: "Scorpius Move"
+- tapOn:
+    id: "login-phone-input"
+- inputText: "11999998888"
+- tapOn: "Continuar"
+- assertVisible: "Código de 6 dígitos"

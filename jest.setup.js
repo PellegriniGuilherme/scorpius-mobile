@@ -208,3 +208,5 @@ jest.mock('@react-native-community/netinfo', () => ({
   fetch: jest.fn().mockResolvedValue({ isConnected: true }),
   addEventListener: jest.fn().mockReturnValue(() => undefined),
 }));
+
+require('./jest.delivery-service-mock.js');

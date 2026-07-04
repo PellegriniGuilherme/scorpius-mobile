@@ -35,8 +35,7 @@ const DRIVER = {
   id: 91,
   name: 'João da Silva',
   whatsapp: '+5511999998888',
-  status: 'active' as const,
-  member_since: '2025-01-01',
+  company_id: 42,
 };
 
 describe('PerfilMotoristaScreen', () => {
@@ -66,10 +65,9 @@ describe('PerfilMotoristaScreen', () => {
     expect(screen.getByText('+55 (11) 99999-8888')).toBeTruthy();
   });
 
-  it('shows driver status as "active"', () => {
+  it('shows driver company id', () => {
     renderWithTheme(<PerfilMotoristaScreen />);
-    // ptBR.profile.statusLabel = 'Status' (label) + valor 'active'
-    expect(screen.getByText('active')).toBeTruthy();
+    expect(screen.getByText('#42')).toBeTruthy();
   });
 
   it('logout button has accessibilityRole "button"', () => {
@@ -115,7 +113,7 @@ describe('PerfilMotoristaScreen', () => {
     renderWithTheme(<PerfilMotoristaScreen />);
     // Vários "—" para name, status, whatsapp
     const dashes = screen.getAllByText('—');
-    expect(dashes.length).toBeGreaterThanOrEqual(3);
+    expect(dashes.length).toBeGreaterThanOrEqual(2);
   });
 
   it('exibe versão do app (expo-constants mock)', () => {

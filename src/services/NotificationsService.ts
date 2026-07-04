@@ -41,6 +41,7 @@ export class NotificationsService {
   private responseSub: { remove: () => void } | null = null;
   private deepLinkHandler: DeepLinkHandler | null = null;
   private apiPostDeviceToken: ((token: string, driverId: number) => Promise<void>) | null = null;
+  private lastRegisteredToken: string | null = null;
 
   /**
    * T091 R3: silent failure guard. Em production, se EAS project ID
@@ -155,6 +156,11 @@ export class NotificationsService {
       return;
     }
     await this.apiPostDeviceToken(expoPushToken, driverId);
+    this.lastRegisteredToken = expoPushToken;
+  }
+
+  getLastRegisteredToken(): string | null {
+    return this.lastRegisteredToken;
   }
 
   /**
@@ -170,6 +176,7 @@ export class NotificationsService {
       this.responseSub = null;
     }
     this.deepLinkHandler = null;
+    this.lastRegisteredToken = null;
   }
 }
 

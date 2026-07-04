@@ -68,17 +68,10 @@ export function PerfilMotoristaScreen() {
           <View style={{ gap: tokens.space[3] }}>
             <View>
               <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, textTransform: 'uppercase' }}>
-                {ptBR.profile.statusLabel}
+                Empresa
               </Text>
-              <Text
-                style={{
-                  fontSize: tokens.text.base,
-                  fontWeight: tokens.weight.semibold,
-                  color: driver?.status === 'active' ? colors.statusSuccessText : colors.textSecondary,
-                  marginTop: tokens.space[1],
-                }}
-              >
-                {driver?.status ?? '—'}
+              <Text style={{ fontSize: tokens.text.base, color: colors.textPrimary, marginTop: tokens.space[1] }}>
+                #{driver?.company_id ?? '—'}
               </Text>
             </View>
             <View>

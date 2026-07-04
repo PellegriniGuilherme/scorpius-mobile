@@ -21,6 +21,25 @@ jest.mock('expo-notifications', () => ({
 
 jest.mock('expo-device', () => ({ isDevice: true }));
 
+jest.mock('@/services/SyncWorker', () => ({
+  syncWorker: {
+    start: jest.fn().mockResolvedValue(undefined),
+    stop: jest.fn(),
+    tick: jest.fn(),
+    setApiClient: jest.fn(),
+  },
+}));
+
+jest.mock('@/lib/deviceId', () => ({
+  getDeviceId: jest.fn().mockResolvedValue('test-device-id'),
+}));
+
+jest.mock('@/api/occurrenceTypes', () => ({
+  registerDeviceToken: jest.fn().mockResolvedValue(undefined),
+  unregisterDeviceToken: jest.fn().mockResolvedValue(undefined),
+  listDriverOccurrenceTypes: jest.fn().mockResolvedValue({ data: [] }),
+}));
+
 import { renderWithTheme, screen, waitFor } from '@/../jest.test-utils';
 import { RootNavigator, navigationRef } from './RootNavigator';
 import { useAuthStore } from '@/store/auth';
@@ -30,8 +49,7 @@ const DRIVER = {
   id: 91,
   name: 'Motorista Teste',
   whatsapp: '+5511999998888',
-  status: 'active' as const,
-  member_since: '2025-01-01',
+  company_id: 1,
 };
 
 // Mock @/api/client para que o bootstrap() do RootNavigator encontre
@@ -50,31 +68,44 @@ jest.mock('@/api/auth', () => ({
     id: 91,
     name: 'Motorista Teste',
     whatsapp: '+5511999998888',
-    status: 'active',
+    company_id: 1,
   }),
   requestOtp: jest.fn(),
   confirmOtp: jest.fn(),
+  logoutDriver: jest.fn().mockResolvedValue(undefined),
 }));
 
 describe('RootNavigator', () => {
-  beforeEach(() => {
+  const mockBootstrap = jest.fn(async () => {
     useAuthStore.setState({
-      driver: null,
-      isAuthenticated: false,
+      driver: DRIVER,
+      isAuthenticated: true,
       isLoading: false,
       error: null,
     });
   });
 
-  it('shows LoginScreen when no driver is authenticated', async () => {
-    // Para este test, mockar loadAccessToken para retornar null
-    // (simula estado "não logado" sem token no SecureStore).
-    (clientApi.loadAccessToken as jest.Mock).mockResolvedValueOnce(null);
+  beforeEach(() => {
+    mockBootstrap.mockClear();
     useAuthStore.setState({
       driver: null,
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      bootstrap: mockBootstrap,
+    });
+  });
+
+  it('shows LoginScreen when no driver is authenticated', async () => {
+    useAuthStore.setState({
+      bootstrap: jest.fn(async () => {
+        useAuthStore.setState({
+          driver: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: null,
+        });
+      }),
     });
     renderWithTheme(<RootNavigator />);
     await waitFor(() => {
@@ -84,6 +115,7 @@ describe('RootNavigator', () => {
   });
 
   it('shows HomeMotoristaScreen when driver is authenticated', async () => {
+    (clientApi.loadAccessToken as jest.Mock).mockResolvedValue('mock-token');
     useAuthStore.setState({
       driver: DRIVER,
       isAuthenticated: true,
@@ -91,21 +123,7 @@ describe('RootNavigator', () => {
       error: null,
     });
     renderWithTheme(<RootNavigator />);
-    // O useEffect do RootNavigator chama bootstrap() que reseta o
-    // estado se loadAccessToken() retorna null. Re-seta o estado
-    // APÓS o mount para prevalecer sobre o efeito.
-    await waitFor(() => {
-      useAuthStore.setState({
-        driver: DRIVER,
-        isAuthenticated: true,
-        isLoading: false,
-        error: null,
-      });
-    });
-    // Espera a re-renderização
-    await waitFor(() => {
-      expect(screen.getByText(/Minhas entregas/i)).toBeTruthy();
-    });
+    expect(await screen.findByText(/Minhas entregas/i, { timeout: 5000 })).toBeTruthy();
   });
 
   it('preview mode (?preview=screen=home) bypasses auth and shows HomeMotorista', async () => {
@@ -113,7 +131,7 @@ describe('RootNavigator', () => {
     // window.location.search via Object.defineProperty.
     const originalLocation = globalThis.location;
     Object.defineProperty(globalThis, 'location', {
-      value: { search: '?preview=screen=home' },
+      value: { search: '?preview=home' },
       writable: true,
       configurable: true,
     });
@@ -125,9 +143,7 @@ describe('RootNavigator', () => {
         error: null,
       });
       renderWithTheme(<RootNavigator />);
-      await waitFor(() => {
-        expect(screen.getByText(/Minhas entregas/i)).toBeTruthy();
-      });
+      expect(await screen.findByText(/Minhas entregas/i, { timeout: 5000 })).toBeTruthy();
     } finally {
       Object.defineProperty(globalThis, 'location', {
         value: originalLocation,

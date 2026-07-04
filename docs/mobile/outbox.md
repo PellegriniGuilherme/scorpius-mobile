@@ -78,10 +78,15 @@ interface ApiClient {
 }
 ```
 
-Implementação real (em produção) faz:
-1. POST `/api/v1/drivers/proof-upload` (T072) — recebe pre-signed URL
-2. PUT para Spaces (T076)
-3. POST `/api/v1/deliveries/{id}/complete` (T072) — confirma entrega
+Implementação real (`src/api/boot.ts`):
+1. `POST /api/v1/driver/deliveries/{id}/upload-url` — `{ document_type, content_type }` → presigned URL
+2. `PUT <presigned_url>` — binary JPEG
+3. `POST /api/v1/driver/deliveries/{id}/proof` — `{ photo_url, signature_url? }`
+4. `POST /api/v1/driver/deliveries/{id}/complete` — `{ notes? }`
+
+Outbox types adicionais:
+- `delivery_action` — replay FSM (`start`, `pickup`, `in-transit`, `fail`, `complete`)
+- `occurrence_report` — `POST /sync/occurrences`
 
 ### ComprovanteScreen (`src/screens/ComprovanteScreen.tsx`)
 
@@ -127,20 +132,22 @@ Testes:
 5. **Por que `tick()` público e re-entrant safe?** Permitir testes e retry manual sem duplicar items. Flag `ticking` evita corrida.
 6. **Por que DLQ mantém o item na tabela (não deleta)?** Auditoria. UI pode re-enviar ou Guilherme pode inspecionar logs.
 
-## Contrato backend (T072 + T076 + T077 merged em main)
+## Contrato backend (driver routes)
 
 ```
-POST /api/v1/drivers/proof-upload
-  Request: { deliveryId, photoBase64?, signatureName }
-  Response 200: { uploadUrl: 'https://hub.s3.../path', expiresIn: 3600 }
-  
-PUT <uploadUrl>
+POST /api/v1/driver/deliveries/{id}/upload-url
+  Request: { document_type: 'proof_of_delivery'|'signature', content_type: 'image/jpeg' }
+  Response 200: { data: { url, key, content_type, expires_at, method } }
+
+PUT <url>
   Body: binary (image/jpeg)
   Response 200: ok
 
-POST /api/v1/deliveries/{id}/complete
-  Request: { photoUrl, signatureName, completedAt }
-  Response 200: { delivery: { id, status: 'delivered', ... } }
+POST /api/v1/driver/deliveries/{id}/proof
+  Request: { photo_url, signature_url? }
+
+POST /api/v1/driver/deliveries/{id}/complete
+  Request: { photo_url?, signature_url?, notes? }
 ```
 
-Frontend espera fazer `apiClient.uploadProof({ deliveryId, photoPath, signaturePath })`. Implementação interna no move-app cuida dos 3 calls.
+Frontend enfileira `uploadProof({ deliveryId, photoPath, signatureName })` no outbox; `boot.ts` executa a sequência acima.

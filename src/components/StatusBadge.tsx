@@ -1,10 +1,10 @@
 import { View, Text } from 'react-native';
 import { useTheme } from '@/theme/ThemeProvider';
-import type { DeliveryStatus } from '@/mocks/deliveries';
+import type { DeliveryUiStatus } from '@/types/delivery';
 
-export function StatusBadge({ status, label }: { status: DeliveryStatus; label: string }) {
+export function StatusBadge({ status, label }: { status: DeliveryUiStatus; label: string }) {
   const { colors, tokens } = useTheme();
-  const map: Record<DeliveryStatus, { bg: string; fg: string; border: string }> = {
+  const map: Record<DeliveryUiStatus, { bg: string; fg: string; border: string }> = {
     pending: { bg: colors.statusNeutralSurface, fg: colors.statusNeutralText, border: colors.statusNeutralBorder },
     in_route: { bg: colors.statusInfoSurface, fg: colors.statusInfoText, border: colors.statusInfoBorder },
     delivered: { bg: colors.statusSuccessSurface, fg: colors.statusSuccessText, border: colors.statusSuccessBorder },

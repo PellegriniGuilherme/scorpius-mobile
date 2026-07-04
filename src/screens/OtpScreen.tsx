@@ -11,7 +11,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
-import { confirmOtp } from '@/api/auth';
+import { confirmOtp, requestOtp } from '@/api/auth';
+import { getDeviceId } from '@/lib/deviceId';
 import { useAuthStore } from '@/store/auth';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
@@ -71,7 +72,8 @@ export function OtpScreen() {
     setError(null);
     setSubmitting(true);
     try {
-      const result = await confirmOtp(phone, code, 'move-app');
+      const deviceId = await getDeviceId();
+      const result = await confirmOtp(phone, code, deviceId);
       setSession(result.driver);
       // RootNavigator reage a isAuthenticated e troca para AppStack.
     } catch {
@@ -151,10 +153,16 @@ export function OtpScreen() {
             testID="otp-resend"
             label={resendIn > 0 ? ptBR.otp.resendIn.replace('{seconds}', String(resendIn)) : ptBR.otp.resend}
             onPress={() => {
-              // TODO F2 Mobile: re-chamar requestOtp
-              setResendIn(RESEND_COOLDOWN_SEC);
-              // T101: reset OTP TTL quando reenvia código
-              setExpiresIn(DEFAULT_OTP_TTL_SEC);
+              void (async () => {
+                const deviceId = await getDeviceId();
+                try {
+                  const response = await requestOtp(phone, deviceId);
+                  setResendIn(RESEND_COOLDOWN_SEC);
+                  setExpiresIn(response.expires_in ?? DEFAULT_OTP_TTL_SEC);
+                } catch {
+                  setError(ptBR.otp.errorGeneric);
+                }
+              })();
             }}
             variant="ghost"
             disabled={resendIn > 0}

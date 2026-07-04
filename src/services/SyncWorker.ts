@@ -62,23 +62,32 @@ function jitteredBackoff(baseSeconds: number): number {
 export interface ProofUploadPayload {
   deliveryId: number;
   photoPath: string;
-  signaturePath: string;
+  signatureName: string;
+}
+
+export interface DeliveryActionOutboxPayload {
+  deliveryId: number;
+  action: 'start' | 'in_transit' | 'fail' | 'complete';
+  reason?: string;
+  notes?: string;
+}
+
+export interface OccurrenceOutboxPayload {
+  batchId: string;
+  occurrence: {
+    local_id: string;
+    delivery_id: number;
+    type: string;
+    status: 'open';
+    notes?: string;
+    occurred_at: string;
+  };
 }
 
 export interface ApiClient {
-  /**
-   * Faz upload do proof (foto + assinatura) para o backend.
-   * Espera-se que o backend:
-   *  1. Receba o pre-signed URL T076
-   *  2. PUT para Spaces
-   *  3. POST /api/v1/deliveries/{id}/complete T072
-   * Throws em caso de falha (network, 4xx, 5xx).
-   *
-   * T100: `options.idempotencyKey` é estável por item do outbox (mesma
-   * key em retries). Backend cacheia o response por TTL (24h).
-   * Adapter deve enviar como header `Idempotency-Key` no POST /proof-upload.
-   */
   uploadProof(payload: ProofUploadPayload, options?: { idempotencyKey?: string }): Promise<void>;
+  executeDeliveryAction?(payload: DeliveryActionOutboxPayload): Promise<void>;
+  uploadOccurrence?(payload: OccurrenceOutboxPayload): Promise<void>;
 }
 
 export class SyncWorker {
@@ -173,14 +182,23 @@ export class SyncWorker {
       return;
     }
     try {
-      if (item.type !== 'proof_upload') {
-        // Tipo desconhecido: descarta para não bloquear a fila
+      if (item.type === 'proof_upload') {
+        const payload = item.payload as unknown as ProofUploadPayload;
+        await this.api.uploadProof(payload, { idempotencyKey: item.idempotency_key });
+      } else if (item.type === 'delivery_action') {
+        if (!this.api.executeDeliveryAction) {
+          throw new Error('delivery_action handler not configured');
+        }
+        await this.api.executeDeliveryAction(item.payload as unknown as DeliveryActionOutboxPayload);
+      } else if (item.type === 'occurrence_report') {
+        if (!this.api.uploadOccurrence) {
+          throw new Error('occurrence_report handler not configured');
+        }
+        await this.api.uploadOccurrence(item.payload as unknown as OccurrenceOutboxPayload);
+      } else {
         await this.outboxSvc.markDone(item.id);
         return;
       }
-      const payload = item.payload as unknown as ProofUploadPayload;
-      // T100: passa idempotencyKey estável por item (backend cacheia por TTL).
-      await this.api.uploadProof(payload, { idempotencyKey: item.idempotency_key });
       await this.outboxSvc.markDone(item.id);
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);

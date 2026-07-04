@@ -38,7 +38,7 @@ import * as SQLite from 'expo-sqlite';
  */
 const MAX_ATTEMPTS = 5;
 
-export type OutboxType = 'proof_upload';
+export type OutboxType = 'proof_upload' | 'delivery_action' | 'occurrence_report';
 
 export interface OutboxItem {
   id: number;

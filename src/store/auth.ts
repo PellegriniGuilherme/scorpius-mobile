@@ -1,25 +1,22 @@
 /**
  * Scorpius Move — Auth store (Zustand).
- *
- * State: { driver, isAuthenticated, isLoading }.
- * O access_token é gerenciado pelo `api/client.ts` (SecureStore);
- * esta store apenas rastreia o objeto Driver para uso na UI.
- *
- * Persistência do driver: NÃO persistido (driver é recarregado via
- * /driver/auth/me no boot se o token existir).
  */
 import { create } from 'zustand';
-import { loadAccessToken, setAccessToken, registerSessionExpiredHandler } from '@/api/client';
-import { fetchDriverMe, type DriverMe } from '@/api/auth';
+import { loadAccessToken, registerSessionExpiredHandler } from '@/api/client';
+import { fetchDriverMe, logoutDriver, type DriverSession } from '@/api/auth';
+import { unregisterDeviceToken } from '@/api/occurrenceTypes';
+import { getDeviceId } from '@/lib/deviceId';
+import { deliveryCache } from '@/services/DeliveryCacheService';
+import { syncWorker } from '@/services/SyncWorker';
 
 interface AuthState {
-  driver: DriverMe | null;
+  driver: DriverSession | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
 
   bootstrap: () => Promise<void>;
-  setSession: (driver: DriverMe) => void;
+  setSession: (driver: DriverSession) => void;
   clearSession: () => Promise<void>;
   setError: (error: string | null) => void;
 }
@@ -30,11 +27,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
   error: null,
 
-  /**
-   * Chamado no boot do app. Se há token no SecureStore, tenta
-   * revalidar via /driver/auth/me. Em sucesso, hidrata a store.
-   * Em 401, o interceptor do apiClient já limpou o token.
-   */
   bootstrap: async () => {
     set({ isLoading: true, error: null });
     try {
@@ -55,16 +47,26 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   clearSession: async () => {
-    await setAccessToken(null);
+    syncWorker.stop();
+    const deviceId = await getDeviceId();
+    await logoutDriver(deviceId);
+    try {
+      const { notifications } = await import('@/services/NotificationsService');
+      const token = notifications.getLastRegisteredToken();
+      if (token) {
+        await unregisterDeviceToken(token);
+      }
+      notifications.stop();
+    } catch {
+      // best-effort push unregister
+    }
+    await deliveryCache.clear();
     set({ driver: null, isAuthenticated: false, isLoading: false, error: null });
   },
 
   setError: (error) => set({ error }),
 }));
 
-// ---------------------------------------------------------------------------
-// Wire o interceptor 401 para limpar a store quando o token expira.
-// ---------------------------------------------------------------------------
 registerSessionExpiredHandler(() => {
   void useAuthStore.getState().clearSession();
 });

@@ -64,17 +64,17 @@ describe('ComprovanteScreen', () => {
     });
   });
 
-  it('shows "Entrega não encontrada" for invalid deliveryId', () => {
+  it('shows "Entrega não encontrada" for invalid deliveryId', async () => {
     setRouteParams({ deliveryId: 99999 });
     renderWithTheme(<ComprovanteScreen />);
-    expect(screen.getByText('Entrega não encontrada.')).toBeTruthy();
+    expect(await screen.findByText('Entrega não encontrada.')).toBeTruthy();
   });
 
   it('tap "Capturar foto" (mock success) updates visual state', async () => {
     await setupHappyPathPickPhoto();
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ComprovanteScreen />);
-    fireEvent.press(screen.getByText('Capturar foto'));
+    fireEvent.press(await screen.findByText('Capturar foto'));
     await waitFor(() => {
       expect(screen.getByText('Foto capturada')).toBeTruthy();
       expect(screen.getByText('Tirar novamente')).toBeTruthy();
@@ -82,10 +82,10 @@ describe('ComprovanteScreen', () => {
     expect(ImagePicker.launchCameraAsync).toHaveBeenCalled();
   });
 
-  it('"Confirmar entrega" disabled without photo or signature', () => {
+  it('"Confirmar entrega" disabled without photo or signature', async () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ComprovanteScreen />);
-    const submitBtn = screen.getByRole('button', { name: 'Confirmar entrega' });
+    const submitBtn = await screen.findByRole('button', { name: 'Confirmar entrega' });
     expect(submitBtn.props.accessibilityState?.disabled).toBe(true);
   });
 
@@ -93,7 +93,7 @@ describe('ComprovanteScreen', () => {
     await setupHappyPathPickPhoto();
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ComprovanteScreen />);
-    fireEvent.press(screen.getByText('Capturar foto'));
+    fireEvent.press(await screen.findByText('Capturar foto'));
     await waitFor(() => expect(screen.getByText('Tirar novamente')).toBeTruthy());
     const input = screen.getByLabelText('Assinatura do destinatário');
     fireEvent.changeText(input, 'João da Silva');
@@ -106,7 +106,7 @@ describe('ComprovanteScreen', () => {
     syncWorker.setApiClient({ uploadProof: successfulUpload });
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ComprovanteScreen />);
-    fireEvent.press(screen.getByText('Capturar foto'));
+    fireEvent.press(await screen.findByText('Capturar foto'));
     await waitFor(() => expect(screen.getByText('Tirar novamente')).toBeTruthy());
     const input = screen.getByLabelText('Assinatura do destinatário');
     fireEvent.changeText(input, 'João da Silva');
@@ -126,7 +126,7 @@ describe('ComprovanteScreen', () => {
     syncWorker.setApiClient({ uploadProof: failingUpload });
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ComprovanteScreen />);
-    fireEvent.press(screen.getByText('Capturar foto'));
+    fireEvent.press(await screen.findByText('Capturar foto'));
     await waitFor(() => expect(screen.getByText('Tirar novamente')).toBeTruthy());
     const input = screen.getByLabelText('Assinatura do destinatário');
     fireEvent.changeText(input, 'João da Silva');
@@ -160,7 +160,7 @@ describe('ComprovanteScreen DLQ UI (T098)', () => {
     const id = await outbox.enqueue('proof_upload', {
       deliveryId: 5000,
       photoPath: '/cache/x.jpg',
-      signaturePath: 'tester',
+      signatureName: 'tester',
     });
     for (let i = 0; i < 5; i++) {
       await outbox.markFailed(id, '[DLQ] test', 0);
@@ -192,7 +192,7 @@ describe('ComprovanteScreen DLQ UI (T098)', () => {
     const id = await outbox.enqueue('proof_upload', {
       deliveryId: 6000,
       photoPath: '/cache/y.jpg',
-      signaturePath: 'retryme',
+      signatureName: 'retryme',
     });
     for (let i = 0; i < 5; i++) {
       await outbox.markFailed(id, '[DLQ] something', 0);

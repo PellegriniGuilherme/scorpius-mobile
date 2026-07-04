@@ -62,103 +62,66 @@ Boot (RootNavigator useEffect)
   → setupSyncWorker(apiClient)     injeta client no SyncWorker
 ```
 
-**Gaps auth:**
-- `device_id` hardcoded `'move-app'` — deve ser UUID persistente
-- Reenviar OTP: TODO em `OtpScreen.tsx` (só reseta timer)
+**Auth:** `device_id` persistente via `src/lib/deviceId.ts`. OTP resend wired em `OtpScreen.tsx`.
 
 ## API wired vs não wired
 
-### ✅ Wired (chamado em runtime)
+### ✅ Wired (produção)
 | Endpoint | Arquivo |
 |----------|---------|
-| `GET /driver/check-phone` | `api/auth.ts` → `LoginScreen` |
-| `POST /driver/auth/otp` | `api/auth.ts` → `LoginScreen` |
-| `POST /driver/auth/otp/confirm` | `api/auth.ts` → `OtpScreen` |
-| `GET /driver/auth/me` | `api/auth.ts` → `store/auth.ts` |
-| Proof presign → PUT → complete | `api/boot.ts` → `SyncWorker` |
+| Auth completo (check-phone → OTP → confirm → refresh → logout → me) | `api/auth.ts`, `api/client.ts` |
+| Entregas driver (list, detail, FSM actions) | `api/deliveries.ts`, `services/deliveryActions.ts` |
+| Proof upload-url → PUT → proof → complete | `api/boot.ts` → `SyncWorker` |
+| Cache offline entregas | `services/DeliveryCacheService.ts` |
+| Sync events/occurrences/cursor | `api/sync.ts` |
+| Ocorrências driver | `api/occurrenceTypes.ts`, `ReportarOcorrenciaScreen` |
+| Push device-tokens | `NotificationsService` + `RootNavigator` boot |
+| Outbox types: `proof_upload`, `delivery_action`, `occurrence_report` | `OutboxService`, `SyncWorker` |
 
-### ❌ Não wired (backend existe, app usa mock)
-| Endpoint | Deveria alimentar |
-|----------|------------------|
-| `GET /driver/deliveries` | `HomeMotoristaScreen` |
-| `GET /driver/deliveries/{id}` | `DetalheEntregaScreen` |
-| `POST /driver/deliveries/{id}/start` etc. | Ações na tela detalhe |
-| `POST /driver/device-tokens` | `NotificationsService` (existe, não chamado) |
-| `POST /upload/telemetry` | Sem tela |
-| `POST /sync/*` | Parcial |
+### ⚠️ Mock apenas em preview/tests
+| Recurso | Onde |
+|---------|------|
+| Entregas fixture | `src/mocks/deliveries.ts` + `?preview=` |
 
-## Mock de entregas
+## Entregas — shape API
 
-Arquivo: `src/mocks/deliveries.ts`
+Mapper: `src/lib/mapDelivery.ts` (`DeliveryResource` → `DeliveryViewModel`)
 
-- 3 entregas com `driver_id: 91`
-- Home filtra por `driver?.id` do auth store
-- **Se backend retornar ID diferente, lista fica vazia**
+Campos API: `reference_code`, `recipient`, `delivery_address`, `package_count`, `weight_kg`, status FSM (`pending` → `assigned` → `picked_up` → `in_transit` → `delivered`|`failed`).
 
-Shape local (pode diferir do backend):
-```typescript
-interface Delivery {
-  id, code, status, customer, address, items,
-  scheduled_for, window_start, window_end, driver_id, proof_url?
-}
-```
-
-**Antes de wire:** comparar com response real de `GET /driver/deliveries`.
-
-## Outbox offline (comprovante)
+## Outbox offline (comprovante + ações)
 
 ```
-ComprovanteScreen
-  → expo-image-picker (foto)
-  → OutboxService.enqueue({ type: 'proof', payload })
-  → SyncWorker.tick() (manual após submit)
+ComprovanteScreen / DetalheEntrega
+  → outbox.enqueue(type, payload)
+  → syncWorker.start() no boot (RootNavigator)
 
-SyncWorker (backoff: 30, 60, 120, 300, 600s + jitter 50%)
-  → POST /deliveries/{id}/proof-upload  (presign)
-  → PUT {presigned_url}                  (Spaces)
-  → POST /deliveries/{id}/complete
-
-DLQ: attempts >= 5 → next_retry_at = 0
-UI: badge + modal retry em ComprovanteScreen
+SyncWorker
+  proof_upload → POST /driver/deliveries/{id}/upload-url → PUT binary → proof → complete
+  delivery_action → POST /driver/deliveries/{id}/{action}
+  occurrence_report → POST /sync/occurrences
 ```
 
-**Gap crítico:** `syncWorker.start()` nunca chamado — listeners NetInfo/AppState inativos.
-Sync só roda via `tick()` manual pós-submit.
-
-Detalhes: `docs/mobile/outbox.md`
+Detalhes: `docs/mobile/outbox.md`, checklist: `docs/mobile/ROUTE-CHECKLIST.md`
 
 ## Deep links
 
-Configurado em `RootNavigator.tsx`:
 ```
-scorpius://delivery/{id}        → DetalheEntrega
-scorpius://delivery/{id}/route  → MapaRota
-scorpius://delivery/{id}/proof  → Comprovante
-https://app.scorpius.com.br/... (mesmos paths)
+scorpiusmove://home
+scorpiusmove://delivery/{id}
+scorpiusmove://delivery/{id}/route
+scorpiusmove://delivery/{id}/proof
+scorpiusmove://profile
 ```
 
-⚠️ `app.config.ts` usa `scheme: 'scorpiusmove'` — possível inconsistência.
-
-Push tap com `data.delivery_id` → navega `DetalheEntrega`.
-
-## Mapa
-
-`MapaRotaScreen.tsx`:
-- OSM embed via `<Image>` (não usa `react-native-maps` apesar de estar instalado)
-- Distância haversine calculada localmente
-- `Linking.openURL` → Google Maps nativo
-
-`expo-location` configurado em `app.config.ts` mas **não usado**.
+Push tap com `data.delivery_id` → `DetalheEntrega`.
 
 ## Config / env
 
-Base URL: `Constants.expoConfig.extra.apiUrl`
-- Default: `http://localhost:8000/api/v1`
-- Override: `.env` (`EXPO_PUBLIC_*`) ou `eas.json` profiles
+Produção EAS: `https://api.hub.portalscorpiustecnologia.com.br/api/v1` (ver `eas.json` profile `production`).
 
 ```bash
-# .env.example
-EXPO_PUBLIC_API_URL=http://localhost:8000/api/v1
+EXPO_PUBLIC_API_URL=https://api.hub.portalscorpiustecnologia.com.br/api/v1
 ```
 
 ## Testes

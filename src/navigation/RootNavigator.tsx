@@ -24,10 +24,13 @@ import { HomeMotoristaScreen } from '@/screens/HomeMotoristaScreen';
 import { DetalheEntregaScreen } from '@/screens/DetalheEntregaScreen';
 import { MapaRotaScreen } from '@/screens/MapaRotaScreen';
 import { ComprovanteScreen } from '@/screens/ComprovanteScreen';
+import { ReportarOcorrenciaScreen } from '@/screens/ReportarOcorrenciaScreen';
 import { PerfilMotoristaScreen } from '@/screens/PerfilMotoristaScreen';
 import { useAuthStore } from '@/store/auth';
 import { useTheme } from '@/theme/ThemeProvider';
 import { setupSyncWorker } from '@/api/boot';
+import { registerDeviceToken } from '@/api/occurrenceTypes';
+import { syncWorker } from '@/services/SyncWorker';
 import { notifications } from '@/services/NotificationsService';
 import type { AuthStackParamList, AppStackParamList } from './types';
 
@@ -57,6 +60,7 @@ function AppFlow({ initial }: { initial?: keyof AppStackParamList }) {
       <AppStack.Screen name="DetalheEntrega" component={DetalheEntregaScreen} options={{ title: 'Entrega' }} />
       <AppStack.Screen name="MapaRota" component={MapaRotaScreen} options={{ title: 'Rota' }} />
       <AppStack.Screen name="Comprovante" component={ComprovanteScreen} options={{ title: 'Comprovante' }} />
+      <AppStack.Screen name="ReportarOcorrencia" component={ReportarOcorrenciaScreen} options={{ title: 'Ocorrência' }} />
       <AppStack.Screen name="PerfilMotorista" component={PerfilMotoristaScreen} options={{ title: 'Perfil' }} />
     </AppStack.Navigator>
   );
@@ -136,20 +140,37 @@ export function RootNavigator() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
   const bootstrap = useAuthStore((s) => s.bootstrap);
+  const driver = useAuthStore((s) => s.driver);
 
   useEffect(() => {
     void bootstrap();
-    // T103 R-M3: wire-up do SyncWorker no boot. Sem isso, todo upload fica
-    // preso no outbox (api = null → "api client not configured" → retry loop).
     setupSyncWorker();
-    // T099 R-M4: registra handler de push notification que navega
-    // via navigationRef quando o motorista toca na notificação.
+    notifications.configureForegroundBehavior();
+    notifications.setApiPostDeviceToken(async (token, driverId) => {
+      void driverId;
+      await registerDeviceToken(token);
+    });
     notifications.onNotificationResponse((deliveryId) => {
       if (navigationRef.isReady()) {
         navigationRef.navigate('DetalheEntrega', { deliveryId });
       }
     });
   }, [bootstrap]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      syncWorker.stop();
+      return;
+    }
+    void syncWorker.start();
+    if (!driver) return;
+    void (async () => {
+      const reg = await notifications.registerForPushNotificationsAsync();
+      if (reg?.expoPushToken) {
+        await notifications.registerTokenWithBackend(driver.id, reg.expoPushToken);
+      }
+    })();
+  }, [isAuthenticated, driver?.id]);
 
   const previewScreen = useMemo(() => readPreviewFromUrl(), []);
 
@@ -189,7 +210,7 @@ export function RootNavigator() {
       ref={navigationRef}
       theme={navTheme}
       linking={{
-        prefixes: ['scorpius://', 'https://app.scorpius.com.br'],
+        prefixes: ['scorpiusmove://', 'scorpius://', 'https://app.scorpius.com.br'],
         config: {
           screens: {
             HomeMotorista: 'home',

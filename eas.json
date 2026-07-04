@@ -25,7 +25,7 @@
     "production": {
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.scorpius.local/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://api.hub.portalscorpiustecnologia.com.br/api/v1"
       }
     }
   },

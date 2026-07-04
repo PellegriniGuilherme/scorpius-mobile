@@ -21,7 +21,9 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
-import { findDelivery } from '@/mocks/deliveries';
+import { fetchDeliveryWithCache } from '@/services/deliveryService';
+import { mapDelivery } from '@/lib/mapDelivery';
+import type { DeliveryViewModel } from '@/types/delivery';
 import { outbox, type OutboxItem } from '@/services/OutboxService';
 import { syncWorker } from '@/services/SyncWorker';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -35,7 +37,23 @@ type OutboxSyncStatus = 'idle' | 'pending' | 'failed';
 export function ComprovanteScreen() {
   const route = useRoute<Route_>();
   const { colors, tokens } = useTheme();
-  const delivery = findDelivery(route.params.deliveryId);
+  const [delivery, setDelivery] = useState<DeliveryViewModel | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    void (async () => {
+      const res = await fetchDeliveryWithCache(route.params.deliveryId);
+      setDelivery(res.data ? mapDelivery(res.data) : null);
+      setLoading(false);
+    })();
+  }, [route.params.deliveryId]);
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
 
   if (!delivery) {
     return (
@@ -48,7 +66,7 @@ export function ComprovanteScreen() {
   return <ComprovanteScreenInner delivery={delivery} />;
 }
 
-function ComprovanteScreenInner({ delivery }: { delivery: NonNullable<ReturnType<typeof findDelivery>> }) {
+function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
   const { colors, tokens } = useTheme();
   const [photoPath, setPhotoPath] = useState<string | null>(null);
   const [signatureName, setSignatureName] = useState('');
@@ -102,7 +120,7 @@ function ComprovanteScreenInner({ delivery }: { delivery: NonNullable<ReturnType
       // retorna { canceled: false, assets: [{ uri: 'file://...' }] }.
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.7,
+        quality: 0.8,
       });
       if (result.canceled || !result.assets?.[0]) return;
       // Copia para cache local persistente (sobrevive a reload do app).
@@ -129,7 +147,7 @@ function ComprovanteScreenInner({ delivery }: { delivery: NonNullable<ReturnType
     const id = await outbox.enqueue('proof_upload', {
       deliveryId: delivery.id,
       photoPath,
-      signaturePath: signatureName.trim(),
+      signatureName: signatureName.trim(),
     });
     setOutboxId(id);
     setSyncStatus('pending');

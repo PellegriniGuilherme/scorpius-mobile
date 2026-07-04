@@ -1,43 +1,18 @@
 /**
  * Scorpius Move — Driver auth (OTP flow).
- *
- * Endpoints consumidos (Move App only — não confundir com Hub auth):
- *  - POST /api/v1/driver/auth/otp        → request OTP via WhatsApp
- *  - POST /api/v1/driver/auth/confirm    → confirm OTP, get driver token
- *  - GET  /api/v1/driver/auth/me         → driver info (após login)
- *  - GET  /api/v1/driver/check-phone     → gate: motorista existe? (T122)
- *
- * Backend emite token opaco (não Sanctum) — armazenado em
- * `expo-secure-store` (Keychain iOS / EncryptedSharedPreferences Android).
  */
-import { apiClient } from './client';
-import { setAccessToken } from './client';
+import { apiClient, loadRefreshToken, setAccessToken, setRefreshToken } from './client';
 
 export interface OtpRequestResponse {
   message: string;
-  expires_in: number; // segundos até o OTP expirar
+  expires_in: number;
 }
 
-/**
- * T122 — resposta de `GET /driver/check-phone`.
- * Indica se o telefone informado está vinculado a um motorista cadastrado.
- * Se `exists=false`, motorista NÃO se cadastra via app — empresa provisiona.
- */
 export interface CheckPhoneResponse {
   exists: boolean;
-  /** Apenas presente quando exists=true (id do motorista já cadastrado). */
   driverId?: string;
 }
 
-/**
- * T122 — gate de fluxo. Verifica se telefone já tem motorista cadastrado
- * antes de prosseguir para requestOtp. Se `exists=false`, motorista é
- * bloqueado (empresa precisa provisionar antes do login).
- *
- * @param phone — telefone no formato E.164 (ex: `+5511999998888`).
- * @returns CheckPhoneResponse com `exists` boolean (e `driverId` opcional).
- * @throws AxiosError com `response.status === 422` se phone é inválido.
- */
 export async function checkPhone(phone: string): Promise<CheckPhoneResponse> {
   const { data } = await apiClient.get<CheckPhoneResponse>('/driver/check-phone', {
     params: { phone },
@@ -53,15 +28,19 @@ export async function requestOtp(whatsapp: string, deviceId: string): Promise<Ot
   return data;
 }
 
+export interface DriverSession {
+  id: number;
+  name: string;
+  whatsapp: string;
+  company_id: number;
+}
+
 export interface OtpConfirmResponse {
   access_token: string;
+  refresh_token: string;
   token_type: 'Bearer';
-  driver: {
-    id: number;
-    name: string;
-    whatsapp: string;
-    status: 'active' | 'invited' | 'blocked' | 'deactivated';
-  };
+  expires_in: number;
+  driver: DriverSession;
 }
 
 export async function confirmOtp(
@@ -69,23 +48,43 @@ export async function confirmOtp(
   otp: string,
   deviceId: string,
 ): Promise<OtpConfirmResponse> {
-  const { data } = await apiClient.post<OtpConfirmResponse>('/driver/auth/confirm', {
+  const { data } = await apiClient.post<OtpConfirmResponse>('/driver/auth/otp/confirm', {
     whatsapp,
     otp,
     device_id: deviceId,
   });
   await setAccessToken(data.access_token);
+  await setRefreshToken(data.refresh_token);
   return data;
 }
 
-export interface DriverMe {
-  id: number;
-  name: string;
-  whatsapp: string;
-  status: 'active' | 'invited' | 'blocked' | 'deactivated';
+export async function refreshTokens(deviceId: string): Promise<boolean> {
+  const refreshToken = await loadRefreshToken();
+  if (!refreshToken) return false;
+  try {
+    const { data } = await apiClient.post<OtpConfirmResponse>('/driver/auth/refresh', {
+      refresh_token: refreshToken,
+      device_id: deviceId,
+    });
+    await setAccessToken(data.access_token);
+    await setRefreshToken(data.refresh_token);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-export async function fetchDriverMe(): Promise<DriverMe> {
-  const { data } = await apiClient.get<{ user: DriverMe }>('/driver/auth/me');
-  return data.user;
+export async function logoutDriver(deviceId: string): Promise<void> {
+  try {
+    await apiClient.post('/driver/auth/logout', { device_id: deviceId });
+  } catch {
+    // best-effort
+  }
+  await setAccessToken(null);
+  await setRefreshToken(null);
+}
+
+export async function fetchDriverMe(): Promise<DriverSession> {
+  const { data } = await apiClient.get<{ driver: DriverSession }>('/driver/auth/me');
+  return data.driver;
 }

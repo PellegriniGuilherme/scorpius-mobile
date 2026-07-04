@@ -7,9 +7,10 @@
  *  - filtro por status funciona
  *  - empty state quando nenhuma entrega bate o filtro
  */
-import { renderWithTheme, fireEvent, screen } from '@/../jest.test-utils';
+import { renderWithTheme, fireEvent, screen, waitFor } from '@/../jest.test-utils';
 import { HomeMotoristaScreen } from './HomeMotoristaScreen';
 import { useAuthStore } from '@/store/auth';
+import * as deliveryService from '@/services/deliveryService';
 
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
@@ -22,8 +23,7 @@ const DRIVER = {
   id: 91,
   name: 'Motorista Teste',
   whatsapp: '+5511999998888',
-  status: 'active' as const,
-  member_since: '2025-01-01',
+  company_id: 1,
 };
 
 describe('HomeMotoristaScreen', () => {
@@ -38,16 +38,16 @@ describe('HomeMotoristaScreen', () => {
     });
   });
 
-  it('renders 3 mock deliveries for driver 91', () => {
+  it('renders 3 mock deliveries for driver 91', async () => {
     renderWithTheme(<HomeMotoristaScreen />);
-    expect(screen.getByText('Mercado Central Ltda')).toBeTruthy();
+    expect(await screen.findByText('Mercado Central Ltda')).toBeTruthy();
     expect(screen.getByText('Farmácia Paulista')).toBeTruthy();
     expect(screen.getByText('Hospital Norte')).toBeTruthy();
   });
 
-  it('navigates to DetalheEntrega when a card is pressed', () => {
+  it('navigates to DetalheEntrega when a card is pressed', async () => {
     renderWithTheme(<HomeMotoristaScreen />);
-    fireEvent.press(screen.getByText('Mercado Central Ltda'));
+    fireEvent.press(await screen.findByText('Mercado Central Ltda'));
     expect(mockNavigate).toHaveBeenCalledWith('DetalheEntrega', { deliveryId: 1001 });
   });
 
@@ -57,29 +57,20 @@ describe('HomeMotoristaScreen', () => {
     expect(mockNavigate).toHaveBeenCalledWith('PerfilMotorista');
   });
 
-  it('filters by status when "Pendente" filter is pressed', () => {
+  it('filters by status when "Pendente" filter is pressed', async () => {
     renderWithTheme(<HomeMotoristaScreen />);
-    // Filter chip Pendente (testID adicionado para distinguir do badge).
+    await screen.findByText('Mercado Central Ltda');
     fireEvent.press(screen.getByTestId('filter-pending'));
-    // Após filtro, apenas 1 visível (SC-1001 pending)
     expect(screen.getByText('Mercado Central Ltda')).toBeTruthy();
     expect(screen.queryByText('Farmácia Paulista')).toBeNull();
     expect(screen.queryByText('Hospital Norte')).toBeNull();
   });
 
-  it('shows empty state when no deliveries match', () => {
-    // Filtra por status que não tem entrega: "failed" não existe nos mocks
+  it('shows empty state when no deliveries match filter', async () => {
+    (deliveryService.fetchDeliveriesWithCache as jest.Mock).mockResolvedValueOnce({ data: [], fromCache: false });
     renderWithTheme(<HomeMotoristaScreen />);
-    // Sem clicar em "Falhou" (filtro não está nos chips visíveis)
-    // validamos o empty state direto: setar driver_id inexistente
-    useAuthStore.setState({
-      driver: { ...DRIVER, id: 999 },
-      isAuthenticated: true,
-      isLoading: false,
-      error: null,
+    await waitFor(() => {
+      expect(screen.getByText(/Nenhuma entrega/i)).toBeTruthy();
     });
-    renderWithTheme(<HomeMotoristaScreen />);
-    // Empty title aparece
-    expect(screen.getByText(/Nenhuma entrega/i)).toBeTruthy();
   });
 });

@@ -29,6 +29,18 @@ jest.mock('react-native/Libraries/AppState/AppState', () => ({
   },
 }));
 
+jest.mock('@/api/deliveries', () => ({
+  requestProofUploadUrl: jest.fn().mockResolvedValue({
+    url: 'http://mock/spaces/abc?sig=1',
+    key: 'k',
+    content_type: 'image/jpeg',
+    expires_at: '',
+    method: 'PUT',
+  }),
+  storeDeliveryProof: jest.fn().mockResolvedValue(undefined),
+  completeDelivery: jest.fn().mockResolvedValue({}),
+}));
+
 jest.mock('@react-native-community/netinfo', () => ({
   __esModule: true,
   default: {
@@ -66,7 +78,7 @@ describe('SyncWorker', () => {
   });
 
   it('tick() processes item with success → markDone', async () => {
-    const id = await outbox.enqueue('proof_upload', { deliveryId: 1001, photoPath: '/a.jpg', signaturePath: 'João' });
+    const id = await outbox.enqueue('proof_upload', { deliveryId: 1001, photoPath: '/a.jpg', signatureName: 'João' });
     const api: ApiClient = { uploadProof: jest.fn().mockResolvedValue(undefined) };
     worker.setApiClient(api);
 
@@ -76,7 +88,7 @@ describe('SyncWorker', () => {
       {
         deliveryId: 1001,
         photoPath: '/a.jpg',
-        signaturePath: 'João',
+        signatureName: 'João',
       },
       expect.objectContaining({
         idempotencyKey: expect.any(String),
@@ -343,6 +355,10 @@ describe('SyncWorker boot wiring (T103 R-M3)', () => {
   }));
 
   it('setupSyncWorker() injeta ApiClient no SyncWorker singleton e é idempotente', async () => {
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ blob: async () => new Blob(['x']) })
+      .mockResolvedValueOnce({ ok: true }) as typeof fetch;
+
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { setupSyncWorker, _resetSyncWorkerBootForTests } = require('@/api/boot');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -364,7 +380,7 @@ describe('SyncWorker boot wiring (T103 R-M3)', () => {
     await freshOutbox.enqueue('proof_upload', {
       deliveryId: 9999,
       photoPath: '/tmp/x.jpg',
-      signaturePath: 'test',
+      signatureName: 'test',
     });
     const item = await freshOutbox.next();
     expect(item).not.toBeNull();
@@ -401,7 +417,7 @@ describe('SyncWorker boot wiring (T103 R-M3)', () => {
     await freshOutbox.init();
     await freshOutbox.enqueue(
       'proof_upload',
-      { deliveryId: 7777, photoPath: '/a.jpg', signaturePath: 'sig' },
+      { deliveryId: 7777, photoPath: '/a.jpg', signatureName: 'sig' },
       { idempotencyKey: customKey },
     );
 

@@ -135,7 +135,7 @@ describe('OutboxService', () => {
     const payload = {
       deliveryId: 1001,
       photoPath: '/tmp/x.jpg',
-      signaturePath: 'João da Silva',
+      signatureName: 'João da Silva',
       extras: { nested: { deep: true } },
     };
     await svc.enqueue('proof_upload', payload);

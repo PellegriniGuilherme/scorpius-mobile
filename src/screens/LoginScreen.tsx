@@ -18,6 +18,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { checkPhone, requestOtp } from '@/api/auth';
+import { getDeviceId } from '@/lib/deviceId';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
 import type { AuthStackParamList } from '@/navigation/types';
@@ -50,7 +51,7 @@ export function LoginScreen() {
     setError(null);
     setSubmitting(true);
     try {
-      const deviceId = 'move-app'; // TODO F2 Mobile: identifier per device
+      const deviceId = await getDeviceId();
       const formattedPhone = `+${trimmed}`;
 
       // T122: gate de fluxo. Bloqueia motorista não-cadastrado ANTES de
