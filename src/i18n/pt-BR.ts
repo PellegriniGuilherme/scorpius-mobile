@@ -72,7 +72,8 @@ export const ptBR = {
     distance: '{km} km',
     duration: '{min} min',
     openExternal: 'Abrir no app de mapas',
-    placeholder: 'Mapa indisponível no Expo Web.\nEm produção (iOS/Android), abre o Google Maps nativo com navegação turn-by-turn.',
+    apiKeyMissing:
+      'Google Maps não configurado. Defina EXPO_PUBLIC_GOOGLE_MAPS_API_KEY no .env e faça rebuild.',
   },
   proof: {
     title: 'Comprovante de entrega',

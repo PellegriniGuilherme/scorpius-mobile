@@ -20,7 +20,13 @@ jest.mock('expo-secure-store', () => ({
 
 // --- expo-constants ---
 jest.mock('expo-constants', () => ({
-  expoConfig: { extra: { apiUrl: 'http://localhost:8000/api/v1' } },
+  expoConfig: {
+    extra: {
+      apiUrl: 'http://localhost:8000/api/v1',
+      googleMapsApiKey: 'test-google-maps-key',
+      eas: { projectId: '00000000-0000-0000-0000-000000000000' },
+    },
+  },
 }));
 
 // --- @react-navigation/native ---

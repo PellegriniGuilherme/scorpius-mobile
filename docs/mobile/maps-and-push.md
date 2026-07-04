@@ -43,7 +43,11 @@ real. Rotação + nova restrição corrigem.
 
 ## Google Maps Setup
 
-## Google Maps Setup
+O app usa **Google Maps em todas as plataformas**:
+- **iOS/Android:** `react-native-maps` + `PROVIDER_GOOGLE` (mapa interativo embutido)
+- **Expo Web:** Google Static Maps API (imagem via `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`)
+
+Sem API key configurada, a tela mostra aviso + botão "Abrir no app de mapas" (deep link gratuito).
 
 ### API Key (onde conseguir)
 
@@ -52,10 +56,11 @@ real. Rotação + nova restrição corrigem.
 3. Ativar APIs:
    - Maps SDK for iOS
    - Maps SDK for Android
-   - Maps JavaScript API (Expo Web fallback)
+   - Maps Static API (Expo Web)
+   - Maps JavaScript API (opcional)
 4. Criar API Key e **restringir** por:
-   - **iOS:** `bundleId` = `local.scorpius.move` (em produção é o da App Store)
-   - **Android:** `SHA-1 fingerprint` do signing key (debug ou release)
+   - **iOS:** `bundleId` = `com.scorpius.move`
+   - **Android:** `SHA-1 fingerprint` + package `com.scorpius.move`
 5. Copiar chave para `.env`:
 
 ```bash
@@ -66,9 +71,17 @@ EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=AIza...
 
 `app.config.ts` injeta em `extra.googleMapsApiKey`. `MapaRotaScreen` lê via `Constants.expoConfig.extra.googleMapsApiKey` em runtime. **Sem a chave, o mapa mostra aviso e fallback visual** (UX não quebra — motorista vê coordenadas e pode usar botão "Abrir no Google Maps" que abre o app nativo).
 
-### Expo Web + Google Maps
+### EAS Build (produção)
 
-Expo Web renderiza `MapView` (via `react-native-web` + Google Maps JS API). Funciona com a mesma API key. Para produção nativa, configurar `ios.config.googleMapsApiKey` e `android.config.googleMaps.apiKey` em `eas.json` por build profile.
+Configure secrets no projeto (não commitar keys):
+
+```bash
+eas secret:create --scope project --name EXPO_PUBLIC_GOOGLE_MAPS_API_KEY --value "AIza..."
+eas secret:create --scope project --name EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS --value "AIza..."
+eas secret:create --scope project --name EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID --value "AIza..."
+```
+
+Rebuild obrigatório após alterar keys nativas (`eas build`).
 
 ## Expo Push Notifications
 

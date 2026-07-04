@@ -1,7 +1,8 @@
 /**
- * Scorpius Move — MapaRotaScreen tests.
+ * Scorpius Move — MapaRotaScreen tests (Google Maps).
  */
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { useRoute } from '@react-navigation/native';
 import { renderWithTheme, fireEvent, screen } from '@/../jest.test-utils';
 import { MapaRotaScreen } from './MapaRotaScreen';
@@ -28,6 +29,10 @@ function setRouteParams(params: { deliveryId: number } | undefined) {
 describe('MapaRotaScreen', () => {
   beforeEach(() => {
     openURLSpy.mockClear();
+    (Constants as { expoConfig?: { extra?: { googleMapsApiKey?: string } } }).expoConfig = {
+      extra: { googleMapsApiKey: 'test-google-maps-key' },
+    };
+    Platform.OS = 'ios';
   });
 
   it('renders mapa with route title and destination address', async () => {
@@ -43,14 +48,28 @@ describe('MapaRotaScreen', () => {
     expect(await screen.findByText('Entrega não encontrada.')).toBeTruthy();
   });
 
-  it('renders OpenStreetMap embed image with destination coords', async () => {
+  it('renders Google MapView on native when API key is set', async () => {
     setRouteParams({ deliveryId: 1001 });
-    const { toJSON } = renderWithTheme(<MapaRotaScreen />);
+    renderWithTheme(<MapaRotaScreen />);
     await screen.findByText('Rota até o destino');
-    const tree = JSON.stringify(toJSON());
-    expect(tree).toContain('openstreetmap.org');
-    expect(tree).toContain('-23.5613');
-    expect(tree).toContain('-46.6565');
+    expect(screen.getByTestId('google-map')).toBeTruthy();
+    expect(screen.getByTestId('map-marker-destination')).toBeTruthy();
+  });
+
+  it('renders fallback when API key is missing', async () => {
+    (Constants as { expoConfig?: { extra?: { googleMapsApiKey?: string } } }).expoConfig = {
+      extra: { googleMapsApiKey: '' },
+    };
+    setRouteParams({ deliveryId: 1001 });
+    renderWithTheme(<MapaRotaScreen />);
+    expect(await screen.findByTestId('map-fallback')).toBeTruthy();
+  });
+
+  it('renders Google Static Map on web when API key is set', async () => {
+    Platform.OS = 'web';
+    setRouteParams({ deliveryId: 1001 });
+    renderWithTheme(<MapaRotaScreen />);
+    expect(await screen.findByTestId('google-static-map')).toBeTruthy();
   });
 
   it('shows distance and duration cards', async () => {
