@@ -10,7 +10,6 @@ import type { ExpoConfig, ConfigContext } from 'expo/config';
  *    por build profile (development / preview / production) sem rebuild.
  *  - New Architecture (Fabric + TurboModules) default em SDK 56.
  *  - Plugin `expo-secure-store` para persistência do token driver.
- *  - `experiments.typedRoutes: true` para type-safety de rotas.
  *  - T080: lê API keys de `process.env` (definidos em `.env`).
  *    `.env` é gitignored — chaves reais NÃO vão para o repo.
  *  - T082: EAS project ID fixo criado em 2026-06-21 (`eas init`).
@@ -85,9 +84,6 @@ const config: ExpoConfig = {
       },
     ],
   ],
-  experiments: {
-    typedRoutes: true,
-  },
   // `extra` é injetado em runtime via Constants.expoConfig.extra.
   // eas.json (per-profile) sobrescreve apiUrl no build nativo.
   // T082: EAS project ID fixo criado via `eas init` em 2026-06-21.

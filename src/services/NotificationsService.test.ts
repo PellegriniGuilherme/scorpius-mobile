@@ -14,6 +14,10 @@
  */
 import { NotificationsService } from './NotificationsService';
 
+jest.mock('@/lib/isRemotePushAvailable', () => ({
+  isRemotePushAvailable: () => true,
+}));
+
 // Mock expo-notifications
 const mockGetPermissions = jest.fn();
 const mockRequestPermissions = jest.fn();

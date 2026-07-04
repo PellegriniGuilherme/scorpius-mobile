@@ -24,10 +24,13 @@
  *  - Deep linking via Linking.openURL ou NavigationContainer ref.
  *    Aqui expõe onNotificationResponse (callback) e o app registra
  *    o ref para fazer navigate.
+ *  - Expo Go: skip push (SDK 53+ remove remote push no Android).
+ *    Import dinâmico evita crash no boot.
  */
-import * as Notifications from 'expo-notifications';
+import type * as ExpoNotifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
+import { isRemotePushAvailable } from '@/lib/isRemotePushAvailable';
 
 export interface PushRegistration {
   expoPushToken: string;
@@ -35,6 +38,22 @@ export interface PushRegistration {
 }
 
 export type DeepLinkHandler = (deliveryId: number) => void;
+
+type NotificationModule = typeof ExpoNotifications;
+
+let notificationsModule: NotificationModule | null = null;
+
+function getNotificationsModule(): NotificationModule | null {
+  if (!isRemotePushAvailable()) {
+    return null;
+  }
+  if (!notificationsModule) {
+    // Lazy require: evita init do expo-notifications no Expo Go (crash SDK 53+).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    notificationsModule = require('expo-notifications') as NotificationModule;
+  }
+  return notificationsModule;
+}
 
 export class NotificationsService {
   private foregroundSub: { remove: () => void } | null = null;
@@ -52,7 +71,6 @@ export class NotificationsService {
   private warnIfInvalidEasProjectId(): void {
     if (__DEV__) return;
     const projectId = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId;
-    // UUID v4 tem formato 8-4-4-4-12 hex
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!projectId || projectId === '' || !UUID_REGEX.test(projectId)) {
       console.warn(
@@ -67,10 +85,19 @@ export class NotificationsService {
    */
   configureForegroundBehavior(): void {
     this.warnIfInvalidEasProjectId();
+    if (!isRemotePushAvailable()) {
+      if (__DEV__) {
+        console.info(
+          '[NotificationsService] Push remoto indisponível no Expo Go. Use development build para testar notificações.',
+        );
+      }
+      return;
+    }
+
+    const Notifications = getNotificationsModule();
+    if (!Notifications) return;
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        // Mostra a notificação mesmo se o app está em foreground
-        // (UX: motorista vê entrega nova imediatamente)
         shouldShowAlert: true,
         shouldShowBanner: true,
         shouldShowList: true,
@@ -86,14 +113,15 @@ export class NotificationsService {
    * device token.
    */
   async registerForPushNotificationsAsync(): Promise<PushRegistration | null> {
-    // Não funciona em emulador/web — fail silently
-    if (!Device.isDevice) {
+    if (!isRemotePushAvailable() || !Device.isDevice) {
       return null;
     }
 
-    // Verifica/pede permissão
-    // Cast as any: expo-notifications 56 importa PermissionResponse de
-    // 'expo' mas o type atual está vazio. Runtime funciona corretamente.
+    const Notifications = getNotificationsModule();
+    if (!Notifications) {
+      return null;
+    }
+
     const existing = (await Notifications.getPermissionsAsync()) as unknown as { granted: boolean };
     if (!existing.granted) {
       const requested = (await Notifications.requestPermissionsAsync()) as unknown as { granted: boolean };
@@ -102,7 +130,6 @@ export class NotificationsService {
       }
     }
 
-    // Expo push token (proxy que entrega via APNs/FCM)
     const projectId = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId;
     const expoToken = await Notifications.getExpoPushTokenAsync(
       projectId ? { projectId } : undefined,
@@ -116,8 +143,11 @@ export class NotificationsService {
   /**
    * Registra listener de foreground (notification recebida com app aberto).
    */
-  onForegroundReceived(handler: (notification: Notifications.Notification) => void): void {
-    if (this.foregroundSub) return;
+  onForegroundReceived(handler: (notification: ExpoNotifications.Notification) => void): void {
+    if (!isRemotePushAvailable() || this.foregroundSub) return;
+
+    const Notifications = getNotificationsModule();
+    if (!Notifications || this.foregroundSub) return;
     this.foregroundSub = Notifications.addNotificationReceivedListener(handler);
   }
 
@@ -126,8 +156,11 @@ export class NotificationsService {
    * Extrai data.delivery_id e chama deepLinkHandler.
    */
   onNotificationResponse(handler: DeepLinkHandler): void {
-    if (this.responseSub) return;
+    if (!isRemotePushAvailable() || this.responseSub) return;
+
     this.deepLinkHandler = handler;
+    const Notifications = getNotificationsModule();
+    if (!Notifications || this.responseSub) return;
     this.responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data;
       const deliveryId = typeof data?.delivery_id === 'number' ? data.delivery_id : null;
@@ -151,8 +184,6 @@ export class NotificationsService {
    */
   async registerTokenWithBackend(driverId: number, expoPushToken: string): Promise<void> {
     if (!this.apiPostDeviceToken) {
-      // Sem API: silent fallback. App deve setar setApiPostDeviceToken
-      // em boot para persistir no backend.
       return;
     }
     await this.apiPostDeviceToken(expoPushToken, driverId);
@@ -180,5 +211,4 @@ export class NotificationsService {
   }
 }
 
-// Singleton instance para uso em produção.
 export const notifications = new NotificationsService();

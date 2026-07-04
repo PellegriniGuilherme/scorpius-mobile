@@ -20,6 +20,7 @@ jest.mock('expo-secure-store', () => ({
 
 // --- expo-constants ---
 jest.mock('expo-constants', () => ({
+  appOwnership: null,
   expoConfig: {
     extra: {
       apiUrl: 'http://localhost:8000/api/v1',
