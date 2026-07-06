@@ -8,7 +8,7 @@ module.exports = {
       platforms: {
         android: {
           packageImportPath: 'import expo.modules.ExpoModulesPackage;',
-          packageInstance: 'new expo.modules.ExpoModulesPackage()',
+          packageInstance: 'new ExpoModulesPackage()',
         },
       },
     },
