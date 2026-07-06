@@ -1,0 +1,10 @@
+{
+  "name": "@scorpius/eslint-config",
+  "version": "0.0.1",
+  "main": "index.js",
+  "type": "commonjs",
+  "exports": {
+    ".": "./index.js",
+    "./react": "./index.js"
+  }
+}

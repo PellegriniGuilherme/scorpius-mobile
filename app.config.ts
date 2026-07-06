@@ -49,6 +49,7 @@ const config: ExpoConfig = {
   android: {
     // T082: bundle id internacional (decisão Guilherme 12:26)
     package: 'com.scorpius.move',
+    softwareKeyboardLayoutMode: 'resize',
     // T082: Google Maps API key Android nativo
     config: {
       googleMaps: {
@@ -71,6 +72,8 @@ const config: ExpoConfig = {
     bundler: 'metro',
   },
   plugins: [
+    'expo-dev-client',
+    // keyboard-controller: autolinking via react-native.config.js (sem app.plugin Expo)
     'expo-secure-store',
     'expo-sqlite',
     'expo-asset',

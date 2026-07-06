@@ -5,16 +5,13 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { useAuthStore } from '@/store/auth';
 import { useTheme } from '@/theme/ThemeProvider';
+import { formatBrazilPhone, extractBrazilPhoneDigits } from '@/lib/formatPhone';
 import { ptBR } from '@/i18n/pt-BR';
 
 function formatWhatsapp(raw: string): string {
-  const d = raw.replace(/\D/g, '');
-  if (d.length < 12) return raw;
-  const cc = d.slice(0, 2);
-  const area = d.slice(2, 4);
-  const mid = d.slice(4, 9);
-  const end = d.slice(9);
-  return `+${cc} (${area}) ${mid}-${end}`;
+  const digits = extractBrazilPhoneDigits(raw);
+  if (digits.length < 12) return raw;
+  return formatBrazilPhone(digits);
 }
 
 export function PerfilMotoristaScreen() {

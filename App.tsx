@@ -8,6 +8,7 @@
  */
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import type { ReactElement } from 'react';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { RootNavigator } from '@/navigation/RootNavigator';
@@ -21,10 +22,12 @@ function ThemedStatusBar() {
 export default function App(): ReactElement {
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <ThemedStatusBar />
-        <RootNavigator />
-      </ThemeProvider>
+      <KeyboardProvider>
+        <ThemeProvider>
+          <ThemedStatusBar />
+          <RootNavigator />
+        </ThemeProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

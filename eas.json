@@ -8,8 +8,11 @@
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://localhost:8000/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://staging.hub.portalscorpiustecnologia.com.br/api/v1"
       },
       "ios": {
         "simulator": true

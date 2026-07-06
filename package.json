@@ -14,7 +14,11 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "dev:mobile": "expo start --tunnel",
-    "eas:build:dev": "eas build --profile development --platform android --local"
+    "dev:client": "expo start --dev-client",
+    "dev:client:tunnel": "expo start --dev-client --tunnel",
+    "eas:build:dev": "eas build --profile development --platform android",
+    "eas:build:dev:local": "eas build --profile development --platform android --local",
+    "eas:build:preview": "eas build --profile preview --platform android"
   },
   "dependencies": {
     "@expo/metro-runtime": "~56.0.15",
@@ -26,6 +30,7 @@
     "expo": "~56.0.14",
     "expo-asset": "~56.0.17",
     "expo-constants": "~56.0.18",
+    "expo-dev-client": "~56.0.22",
     "expo-device": "^56.0.4",
     "expo-file-system": "^56.0.8",
     "expo-image-picker": "^56.0.18",
@@ -39,17 +44,20 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.85.3",
+    "react-native-keyboard-controller": "1.21.6",
     "react-native-maps": "^1.18.0",
+    "react-native-reanimated": "4.3.1",
     "react-native-safe-area-context": "^5.7.0",
     "react-native-screens": "^4.4.0",
     "react-native-web": "~0.21.2",
+    "react-native-worklets": "0.8.3",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@babel/runtime": "^8.0.0",
     "@babel/traverse": "^8.0.0",
-    "@scorpius/eslint-config": "workspace:*",
+    "@scorpius/eslint-config": "file:./packages/eslint-config",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^29.5.14",
     "@types/node": "^26.0.0",
@@ -58,6 +66,7 @@
     "eslint": "^9.39.4",
     "globals": "^15.15.0",
     "jest-expo": "~56.0.5",
+    "reactotron-react-native": "^5.2.0",
     "typescript": "^6.0.3"
   },
   "private": true

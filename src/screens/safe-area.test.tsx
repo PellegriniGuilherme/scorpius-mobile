@@ -2,8 +2,8 @@
  * Safe area tests (T121) — LoginScreen + OtpScreen com insets mockados.
  *
  * Garante que:
- *  - `useSafeAreaInsets()` é consumido em ambas as screens
- *  - top inset é aplicado no padding-top do KeyboardAvoidingView
+ *  - `useSafeAreaInsets()` é consumido via KeyboardFormScreen
+ *  - top inset é aplicado no padding-top do KeyboardAwareScrollView
  *    (não invade status bar / notch em devices iOS)
  *  - bottom inset é aplicado no padding-bottom (não invade home indicator)
  *  - Em devices sem notch (insets = 0), comportamento é idêntico ao baseline
@@ -46,6 +46,8 @@ jest.mock('@/store/auth', () => ({
 
 interface ScrollViewProps {
   contentContainerStyle?: { paddingTop?: number; paddingBottom?: number };
+  testID?: string;
+  style?: { paddingBottom?: number };
 }
 interface TreeNode {
   type?: unknown;
@@ -57,8 +59,12 @@ const IPHONE_X_INSETS: EdgeInsets = { top: 47, bottom: 34, left: 0, right: 0 };
 const NO_NOTCH_INSETS: EdgeInsets = { top: 0, bottom: 0, left: 0, right: 0 };
 const IPAD_PRO_INSETS: EdgeInsets = { top: 24, bottom: 20, left: 0, right: 0 };
 
-// Base padding aplicado pelo ScrollView (theme tokens.space[6] = 24).
+// Base padding aplicado pelo scroll (theme tokens.space[6] = 24).
 const BASE_PADDING = 24;
+// Com footer sticky, paddingBottom do scroll usa tokens.space[4] = 16.
+const SCROLL_PADDING_BOTTOM_WITH_FOOTER = 16;
+// Footer sticky aplica tokens.space[4] + insets.bottom.
+const FOOTER_BASE_PADDING_BOTTOM = 16;
 
 const BASE_FRAME = { x: 0, y: 0, width: 375, height: 812 };
 
@@ -69,8 +75,25 @@ function metricsFor(insets: EdgeInsets): Metrics {
 function expectedPadding(insets: EdgeInsets) {
   return {
     paddingTop: BASE_PADDING + insets.top,
-    paddingBottom: BASE_PADDING + insets.bottom,
+    paddingBottom: SCROLL_PADDING_BOTTOM_WITH_FOOTER,
+    footerPaddingBottom: FOOTER_BASE_PADDING_BOTTOM + insets.bottom,
   };
+}
+
+function findNodeByTestId(node: unknown, testId: string): TreeNode | null {
+  if (!node) return null;
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findNodeByTestId(child, testId);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof node !== 'object') return null;
+  const n = node as TreeNode & { props?: { testID?: string; style?: { paddingBottom?: number } } };
+  if (n.props?.testID === testId) return n;
+  if (n.children) return findNodeByTestId(n.children, testId);
+  return null;
 }
 
 function findScrollView(node: unknown): TreeNode | null {
@@ -101,7 +124,7 @@ function getScrollPadding(tree: unknown): { paddingTop?: number; paddingBottom?:
 
 describe('T121 — Safe area insets', () => {
   describe('LoginScreen (PhoneInput)', () => {
-    it('aplica top inset = 47 (iPhone X com notch) no contentContainerStyle do ScrollView', () => {
+    it('aplica top inset = 47 (iPhone X com notch) no contentContainerStyle do scroll', () => {
       const tree = renderWithTheme(<LoginScreen />, {
         initialMetrics: metricsFor(IPHONE_X_INSETS),
       });
@@ -110,6 +133,9 @@ describe('T121 — Safe area insets', () => {
       expect(style).not.toBeNull();
       expect(style?.paddingTop).toBe(expectedPadding(IPHONE_X_INSETS).paddingTop);
       expect(style?.paddingBottom).toBe(expectedPadding(IPHONE_X_INSETS).paddingBottom);
+
+      const footer = findNodeByTestId(tree.toJSON(), 'keyboard-form-footer');
+      expect(footer?.props?.style?.paddingBottom).toBe(expectedPadding(IPHONE_X_INSETS).footerPaddingBottom);
     });
 
     it('em device sem notch (insets = 0), padding = BASE_PADDING (24) + 0', () => {
@@ -119,7 +145,7 @@ describe('T121 — Safe area insets', () => {
       const style = getScrollPadding(tree.toJSON());
 
       expect(style?.paddingTop).toBe(BASE_PADDING);
-      expect(style?.paddingBottom).toBe(BASE_PADDING);
+      expect(style?.paddingBottom).toBe(SCROLL_PADDING_BOTTOM_WITH_FOOTER);
     });
 
     it('renderiza sem crash em iPad Pro (insets top=24, bottom=20)', () => {
@@ -138,7 +164,7 @@ describe('T121 — Safe area insets', () => {
       useRoute.mockReturnValue({ params, key: 'test', name: 'Otp' });
     }
 
-    it('aplica top inset = 47 (iPhone X com notch) no contentContainerStyle do ScrollView', () => {
+    it('aplica top inset = 47 (iPhone X com notch) no contentContainerStyle do scroll', () => {
       setRouteParams({ phone: '+5511999998888' });
 
       const tree = renderWithTheme(<OtpScreen />, {
@@ -149,6 +175,9 @@ describe('T121 — Safe area insets', () => {
       expect(style).not.toBeNull();
       expect(style?.paddingTop).toBe(expectedPadding(IPHONE_X_INSETS).paddingTop);
       expect(style?.paddingBottom).toBe(expectedPadding(IPHONE_X_INSETS).paddingBottom);
+
+      const footer = findNodeByTestId(tree.toJSON(), 'keyboard-form-footer');
+      expect(footer?.props?.style?.paddingBottom).toBe(expectedPadding(IPHONE_X_INSETS).footerPaddingBottom);
     });
 
     it('em device sem notch (insets = 0), padding = BASE_PADDING (24) + 0', () => {
@@ -160,7 +189,7 @@ describe('T121 — Safe area insets', () => {
       const style = getScrollPadding(tree.toJSON());
 
       expect(style?.paddingTop).toBe(BASE_PADDING);
-      expect(style?.paddingBottom).toBe(BASE_PADDING);
+      expect(style?.paddingBottom).toBe(SCROLL_PADDING_BOTTOM_WITH_FOOTER);
     });
 
     it('renderiza countdown com safe area aplicada (smoke test integrado)', () => {

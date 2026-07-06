@@ -15,12 +15,14 @@
  * "Aguardando captura" continua aparecendo.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { ScrollView, Text, View, TextInput, ActivityIndicator, Modal, Pressable } from 'react-native';
+import { Text, View, ActivityIndicator, Modal, Pressable, ScrollView } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { Input } from '@/components/Input';
+import { KeyboardFormScreen } from '@/components/KeyboardFormScreen';
 import { fetchDeliveryWithCache } from '@/services/deliveryService';
 import { mapDelivery } from '@/lib/mapDelivery';
 import type { DeliveryViewModel } from '@/types/delivery';
@@ -221,8 +223,13 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView contentContainerStyle={{ padding: tokens.space[6], gap: tokens.space[5] }}>
+    <>
+      <KeyboardFormScreen
+        contentContainerStyle={{ gap: tokens.space[5] }}
+        footer={
+          <Button label={ptBR.proof.submit} onPress={handleSubmit} disabled={!canSubmit} fullWidth />
+        }
+      >
         <View style={{ gap: tokens.space[1] }}>
           <Text style={{ fontSize: tokens.text['2xl'], fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
             {ptBR.proof.title}
@@ -230,7 +237,6 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
           <Text style={{ fontSize: tokens.text.sm, color: colors.textMuted }}>Entrega #{delivery.code}</Text>
         </View>
 
-        {/* T098 — DLQ badge persistente. Tap abre modal com retry por item. */}
         {dlqCount > 0 && (
           <Pressable
             testID="dlq-badge"
@@ -303,10 +309,7 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
         </Card>
 
         <Card>
-          <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, fontWeight: tokens.weight.medium, textTransform: 'uppercase' }}>
-            {ptBR.proof.signatureLabel}
-          </Text>
-          <View style={{ marginTop: tokens.space[3], gap: tokens.space[2] }}>
+          <View style={{ gap: tokens.space[2] }}>
             <View
               style={{
                 height: 80,
@@ -322,34 +325,20 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
                 {signatureName || '— área de assinatura —'}
               </Text>
             </View>
-            <TextInput
-              accessibilityLabel={ptBR.proof.signatureLabel}
+            <Input
+              label={ptBR.proof.signatureLabel}
               placeholder="Nome do destinatário"
-              placeholderTextColor={colors.textSubtle}
               value={signatureName}
               onChangeText={setSignatureName}
-              style={{
-                backgroundColor: colors.surfacePanel,
-                color: colors.textPrimary,
-                borderColor: colors.borderDefault,
-                borderWidth: 1,
-                borderRadius: tokens.radius.md,
-                paddingHorizontal: tokens.space[3],
-                paddingVertical: tokens.space[2],
-                fontSize: tokens.text.base,
-              }}
             />
           </View>
         </Card>
 
-        <Button label={ptBR.proof.submit} onPress={handleSubmit} disabled={!canSubmit} fullWidth />
-
         <Card>
           <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs, lineHeight: 18 }}>{ptBR.proof.placeholder}</Text>
         </Card>
-      </ScrollView>
+      </KeyboardFormScreen>
 
-      {/* T098 — DLQ modal: lista items falhados + botão "Tentar novamente" por item */}
       <Modal
         testID="dlq-modal"
         visible={dlqModalOpen}
@@ -439,6 +428,6 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </>
   );
 }

@@ -216,4 +216,19 @@ jest.mock('@react-native-community/netinfo', () => ({
   addEventListener: jest.fn().mockReturnValue(() => undefined),
 }));
 
+jest.mock('expo-dev-client', () => ({
+  registerDevMenuItems: jest.fn(),
+}));
+
 require('./jest.delivery-service-mock.js');
+
+// --- react-native-keyboard-controller ---
+jest.mock('react-native-keyboard-controller', () => {
+  const { ScrollView, View } = require('react-native');
+  return {
+    KeyboardProvider: ({ children }) => children,
+    KeyboardAwareScrollView: ScrollView,
+    KeyboardStickyView: View,
+    useKeyboardState: () => ({ isVisible: false, height: 0 }),
+  };
+});

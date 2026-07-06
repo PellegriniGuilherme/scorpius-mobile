@@ -60,6 +60,13 @@ describe('LoginScreen', () => {
     expect(btn.props.accessibilityState.disabled).toBe(false);
   });
 
+  it('formats phone with BR mask while typing', () => {
+    renderWithTheme(<LoginScreen />);
+    const input = screen.getByLabelText(/whatsapp/i);
+    fireEvent.changeText(input, '11999998888');
+    expect(input.props.value).toBe('+55 (11) 99999-8888');
+  });
+
   // T122: caminho feliz — check-phone retorna exists=true → requestOtp → Otp
   it('T122: calls checkPhone → requestOtp → navigate Otp when exists=true', async () => {
     renderWithTheme(<LoginScreen />);

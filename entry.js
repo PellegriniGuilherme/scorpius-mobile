@@ -4,6 +4,10 @@
  * Usa registerRootComponent para registrar o App como componente raiz.
  * Cross-platform: funciona em iOS, Android e Web.
  */
+if (__DEV__) {
+  require('./src/lib/reactotron');
+}
+
 import registerRootComponent from 'expo/src/launch/registerRootComponent';
 import App from './App';
 

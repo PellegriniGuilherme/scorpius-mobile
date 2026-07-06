@@ -14,7 +14,7 @@ export const ptBR = {
     title: 'Entrar',
     description: 'Use seu WhatsApp cadastrado para receber o código de acesso.',
     whatsappLabel: 'WhatsApp',
-    whatsappPlaceholder: '(11) 99999-8888',
+    whatsappPlaceholder: '+55 (11) 99999-8888',
     submit: 'Enviar código',
     submitting: 'Enviando...',
     errorInvalidPhone: 'Informe um número de WhatsApp válido.',
