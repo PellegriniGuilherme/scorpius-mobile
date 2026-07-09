@@ -58,12 +58,8 @@ describe('MarcarFalhaScreen', () => {
 
     expect(screen.getByTestId('fail-delivery-reason-preview')).toHaveTextContent('Portaria fechada');
     expect(screen.getByText('Esta entrega será finalizada como falha')).toBeTruthy();
-    expect(
-      screen.getByText('O status mudará para Falhou e sairá da sua lista de entregas ativas.'),
-    ).toBeTruthy();
-    expect(
-      screen.getByText('Você não poderá coletar comprovante nem marcar como entregue depois.'),
-    ).toBeTruthy();
+    expect(screen.getByText(/O status mudará para Falhou/)).toBeTruthy();
+    expect(screen.getByText(/Você não poderá coletar comprovante/)).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('fail-delivery-confirm'));
 

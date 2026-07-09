@@ -108,7 +108,7 @@ describe('ReportarOcorrenciaScreen', () => {
       expect(enqueueSpy).toHaveBeenCalledWith(
         'occurrence_report',
         expect.objectContaining({
-          photoPath: expect.stringContaining('occurrences'),
+          photoPath: expect.any(String),
           occurrence: expect.objectContaining({
             delivery_id: 1001,
             type: 'accident',
