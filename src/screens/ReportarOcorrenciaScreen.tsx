@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { AlertBanner } from '@/components/AlertBanner';
 import { Input } from '@/components/Input';
 import { Select } from '@/components/Select';
 import { KeyboardFormScreen } from '@/components/KeyboardFormScreen';
@@ -18,6 +19,7 @@ import { ptBR } from '@/i18n/pt-BR';
 import type { AppStackParamList } from '@/navigation/types';
 
 type Route_ = RouteProp<AppStackParamList, 'ReportarOcorrencia'>;
+type OccurrencePhase = 'form' | 'confirm';
 
 export function ReportarOcorrenciaScreen() {
   const route = useRoute<Route_>();
@@ -31,7 +33,7 @@ export function ReportarOcorrenciaScreen() {
   const [loadError, setLoadError] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
+  const [phase, setPhase] = useState<OccurrencePhase>('form');
   const [fromCache, setFromCache] = useState(false);
 
   const selectedType = useMemo(
@@ -41,6 +43,7 @@ export function ReportarOcorrenciaScreen() {
   const requiresPhoto = selectedType?.requires_photo ?? false;
   const hasPhoto = !!photoPath;
   const canSubmit = !!selectedSlug && (!requiresPhoto || hasPhoto);
+  const missingHint = !canSubmit && requiresPhoto && !hasPhoto ? ptBR.occurrence.missingPhoto : null;
 
   useEffect(() => {
     void (async () => {
@@ -135,45 +138,121 @@ export function ReportarOcorrenciaScreen() {
     );
   }
 
+  if (phase === 'confirm') {
+    return (
+      <KeyboardFormScreen
+        contentContainerStyle={{ gap: tokens.space[4] }}
+        footer={
+          <View style={{ gap: tokens.space[3] }}>
+            <Button
+              testID="occurrence-confirm-submit"
+              label={ptBR.occurrence.confirmActionExplicit}
+              onPress={() => void handleSubmit()}
+              loading={submitting}
+              fullWidth
+            />
+            <Button
+              testID="occurrence-confirm-back"
+              label={ptBR.occurrence.back}
+              variant="ghost"
+              onPress={() => setPhase('form')}
+              disabled={submitting}
+              fullWidth
+            />
+          </View>
+        }
+      >
+        <Text style={{ fontSize: tokens.text['2xl'], fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
+          {ptBR.occurrence.confirmTitle}
+        </Text>
+
+        <Card
+          style={{
+            backgroundColor: colors.statusInfoSurface,
+            borderColor: colors.statusInfoBorder,
+          }}
+        >
+          <Text style={{ fontSize: tokens.text.base, fontWeight: tokens.weight.semibold, color: colors.statusInfoText }}>
+            {ptBR.occurrence.confirmConsequencesTitle}
+          </Text>
+          <View style={{ marginTop: tokens.space[3], gap: tokens.space[2] }}>
+            {[ptBR.occurrence.confirmConsequence1, ptBR.occurrence.confirmConsequence2, ptBR.occurrence.confirmConsequence3].map(
+              (line) => (
+                <Text key={line} style={{ color: colors.textSecondary, fontSize: tokens.text.sm, lineHeight: 20 }}>
+                  • {line}
+                </Text>
+              ),
+            )}
+          </View>
+        </Card>
+
+        <Card>
+          <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, textTransform: 'uppercase' }}>
+            {ptBR.occurrence.typeLabel}
+          </Text>
+          <Text style={{ color: colors.textPrimary, fontSize: tokens.text.base, marginTop: tokens.space[2] }}>
+            {selectedType?.name ?? '—'}
+          </Text>
+          {notes.trim() ? (
+            <>
+              <Text
+                style={{
+                  fontSize: tokens.text.xs,
+                  color: colors.textMuted,
+                  textTransform: 'uppercase',
+                  marginTop: tokens.space[4],
+                }}
+              >
+                {ptBR.occurrence.descriptionLabel}
+              </Text>
+              <Text style={{ color: colors.textPrimary, fontSize: tokens.text.sm, marginTop: tokens.space[2] }}>
+                {notes.trim()}
+              </Text>
+            </>
+          ) : null}
+          {requiresPhoto ? (
+            <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm, marginTop: tokens.space[3] }}>
+              {hasPhoto ? '✓ Foto anexada' : '✗ Foto pendente'}
+            </Text>
+          ) : null}
+        </Card>
+      </KeyboardFormScreen>
+    );
+  }
+
   return (
     <KeyboardFormScreen
       contentContainerStyle={{ gap: tokens.space[4] }}
       footer={
-        <Button
-          label={ptBR.occurrence.submit}
-          onPress={() => void handleSubmit()}
-          loading={submitting}
-          disabled={!canSubmit}
-          fullWidth
-        />
+        <View style={{ gap: tokens.space[2] }}>
+          {missingHint ? (
+            <Text style={{ color: colors.statusWarningText, fontSize: tokens.text.sm, textAlign: 'center' }}>
+              {missingHint}
+            </Text>
+          ) : null}
+          <Button
+            testID="occurrence-review"
+            label={ptBR.occurrence.review}
+            onPress={() => setPhase('confirm')}
+            disabled={!canSubmit}
+            fullWidth
+          />
+        </View>
       }
     >
       <Text style={{ fontSize: tokens.text['2xl'], fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
         {ptBR.occurrence.title}
       </Text>
-      <Card
-        style={{
-          backgroundColor: colors.statusInfoSurface,
-          borderColor: colors.statusInfoBorder,
-        }}
-      >
-        <Text
-          style={{
-            fontSize: tokens.text.sm,
-            fontWeight: tokens.weight.semibold,
-            color: colors.statusInfoText,
-          }}
-        >
-          {ptBR.occurrence.infoBannerTitle}
-        </Text>
-        <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm, marginTop: tokens.space[2], lineHeight: 20 }}>
-          {ptBR.occurrence.infoBannerBody}
-        </Text>
-      </Card>
+
+      <AlertBanner
+        tone="info"
+        title={ptBR.occurrence.infoBannerTitle}
+        message={ptBR.occurrence.infoBannerBody}
+        testID="occurrence-info-banner"
+      />
+
       {fromCache && (
-        <Text style={{ color: colors.statusWarningText, fontSize: tokens.text.xs }}>
-          {ptBR.occurrence.offlineTypes}
-        </Text>
+        <AlertBanner tone="warning" message={ptBR.occurrence.offlineTypes} testID="occurrence-offline-banner" />
       )}
 
       <Card>
@@ -188,59 +267,68 @@ export function ReportarOcorrenciaScreen() {
       </Card>
 
       {requiresPhoto && (
-        <Card>
-          <Text
-            style={{
-              fontSize: tokens.text.xs,
-              color: colors.textMuted,
-              fontWeight: tokens.weight.medium,
-              textTransform: 'uppercase',
-            }}
-          >
-            {ptBR.occurrence.photoLabel}
-          </Text>
-          <View
-            style={{
-              marginTop: tokens.space[3],
-              height: 180,
-              backgroundColor: hasPhoto ? colors.statusSuccessSurface : colors.surfaceInset,
-              borderColor: hasPhoto ? colors.statusSuccessBorder : colors.borderDefault,
-              borderWidth: 2,
-              borderRadius: tokens.radius.md,
-              borderStyle: hasPhoto ? 'solid' : 'dashed',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: tokens.space[2],
-            }}
-          >
-            {hasPhoto ? (
-              <>
-                <Text style={{ fontSize: 48, color: colors.statusSuccessMarker }}>📷</Text>
-                <Text style={{ color: colors.statusSuccessText, fontWeight: tokens.weight.semibold }}>
-                  {ptBR.occurrence.photoCaptured}
-                </Text>
-              </>
-            ) : (
-              <>
-                <Text style={{ fontSize: 48, color: colors.textSubtle }}>📷</Text>
-                <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm }}>
-                  {ptBR.occurrence.photoRequired}
-                </Text>
-              </>
-            )}
-          </View>
-          <View style={{ marginTop: tokens.space[3] }}>
-            <Button
-              label={hasPhoto ? ptBR.occurrence.retakePhoto : capturing ? ptBR.occurrence.openingCamera : ptBR.occurrence.capturePhoto}
-              variant={hasPhoto ? 'ghost' : 'secondary'}
-              onPress={handleCapturePhoto}
-              loading={capturing}
-              disabled={capturing}
-              fullWidth
-              testID="occurrence-capture-photo"
-            />
-          </View>
-        </Card>
+        <>
+          <AlertBanner tone="warning" message={ptBR.occurrence.photoTypeWarning} testID="occurrence-photo-warning" />
+          <Card>
+            <Text
+              style={{
+                fontSize: tokens.text.xs,
+                color: colors.textMuted,
+                fontWeight: tokens.weight.medium,
+                textTransform: 'uppercase',
+              }}
+            >
+              {ptBR.occurrence.photoLabel}
+            </Text>
+            <View
+              style={{
+                marginTop: tokens.space[3],
+                height: 180,
+                backgroundColor: hasPhoto ? colors.statusSuccessSurface : colors.surfaceInset,
+                borderColor: hasPhoto ? colors.statusSuccessBorder : colors.borderDefault,
+                borderWidth: 2,
+                borderRadius: tokens.radius.md,
+                borderStyle: hasPhoto ? 'solid' : 'dashed',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: tokens.space[2],
+              }}
+            >
+              {hasPhoto ? (
+                <>
+                  <Text style={{ fontSize: 48, color: colors.statusSuccessMarker }}>📷</Text>
+                  <Text style={{ color: colors.statusSuccessText, fontWeight: tokens.weight.semibold }}>
+                    {ptBR.occurrence.photoCaptured}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={{ fontSize: 48, color: colors.textSubtle }}>📷</Text>
+                  <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm }}>
+                    {ptBR.occurrence.photoRequired}
+                  </Text>
+                </>
+              )}
+            </View>
+            <View style={{ marginTop: tokens.space[3] }}>
+              <Button
+                label={
+                  hasPhoto
+                    ? ptBR.occurrence.retakePhoto
+                    : capturing
+                      ? ptBR.occurrence.openingCamera
+                      : ptBR.occurrence.capturePhoto
+                }
+                variant={hasPhoto ? 'ghost' : 'secondary'}
+                onPress={handleCapturePhoto}
+                loading={capturing}
+                disabled={capturing}
+                fullWidth
+                testID="occurrence-capture-photo"
+              />
+            </View>
+          </Card>
+        </>
       )}
 
       <Card>

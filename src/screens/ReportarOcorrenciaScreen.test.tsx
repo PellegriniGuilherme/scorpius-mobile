@@ -71,6 +71,7 @@ describe('ReportarOcorrenciaScreen', () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ReportarOcorrenciaScreen />);
     expect(await screen.findByText('Reportar ocorrência')).toBeTruthy();
+    expect(screen.getByTestId('occurrence-info-banner')).toBeTruthy();
     expect(screen.getByText('A entrega continua')).toBeTruthy();
     expect(screen.getByTestId('occurrence-type-trigger')).toBeTruthy();
     expect(screen.getByText('Acidente')).toBeTruthy();
@@ -80,14 +81,15 @@ describe('ReportarOcorrenciaScreen', () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ReportarOcorrenciaScreen />);
     await screen.findByText('Foto da ocorrência');
+    expect(screen.getByTestId('occurrence-photo-warning')).toBeTruthy();
     expect(screen.getByText('Foto obrigatória para este tipo')).toBeTruthy();
   });
 
-  it('keeps submit disabled until photo is captured for required types', async () => {
+  it('keeps review disabled until photo is captured for required types', async () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ReportarOcorrenciaScreen />);
-    const submit = await screen.findByText('Enviar');
-    expect(submit).toBeDisabled();
+    const review = await screen.findByTestId('occurrence-review');
+    expect(review).toBeDisabled();
   });
 
   it('enqueues occurrence with photo when required type has photo', async () => {
@@ -102,7 +104,9 @@ describe('ReportarOcorrenciaScreen', () => {
     fireEvent.press(await screen.findByTestId('occurrence-capture-photo'));
     await waitFor(() => expect(screen.getByText('Foto capturada')).toBeTruthy());
 
-    fireEvent.press(screen.getByText('Enviar'));
+    fireEvent.press(screen.getByTestId('occurrence-review'));
+    await waitFor(() => expect(screen.getByText('Confirmar ocorrência')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('occurrence-confirm-submit'));
 
     await waitFor(() => {
       expect(enqueueSpy).toHaveBeenCalledWith(
@@ -128,7 +132,9 @@ describe('ReportarOcorrenciaScreen', () => {
     fireEvent.press(screen.getByTestId('occurrence-type-option-delay'));
 
     const enqueueSpy = jest.spyOn(outbox, 'enqueue');
-    fireEvent.press(screen.getByText('Enviar'));
+    fireEvent.press(screen.getByTestId('occurrence-review'));
+    await waitFor(() => expect(screen.getByText('Confirmar ocorrência')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('occurrence-confirm-submit'));
 
     await waitFor(() => {
       expect(enqueueSpy).toHaveBeenCalledWith(
