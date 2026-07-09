@@ -16,6 +16,7 @@ const DRIVER = {
   name: 'João da Silva',
   whatsapp: '+5511999998888',
   company_id: 42,
+  company_name: 'Acme Transportes',
 };
 
 describe('PerfilMotoristaScreen', () => {
@@ -34,7 +35,7 @@ describe('PerfilMotoristaScreen', () => {
   it('renders driver name and avatar initial', () => {
     renderWithTheme(<PerfilMotoristaScreen />);
     expect(screen.getByText('João da Silva')).toBeTruthy();
-    expect(screen.getByText('J')).toBeTruthy();
+    expect(screen.getByText('JS')).toBeTruthy();
   });
 
   it('formats WhatsApp to E.164 BR pattern', () => {
@@ -42,9 +43,23 @@ describe('PerfilMotoristaScreen', () => {
     expect(screen.getByText('+55 (11) 99999-8888')).toBeTruthy();
   });
 
-  it('shows driver company id', () => {
+  it('shows platform label when company_name is absent', () => {
+    useAuthStore.setState({
+      driver: { ...DRIVER, company_name: null },
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      clearSession: mockClearSession as any,
+    });
     renderWithTheme(<PerfilMotoristaScreen />);
-    expect(screen.getByText('#42')).toBeTruthy();
+    expect(screen.getByText('Plataforma Scorpius')).toBeTruthy();
+  });
+
+  it('shows driver company name', () => {
+    renderWithTheme(<PerfilMotoristaScreen />);
+    expect(screen.getByText('Acme Transportes')).toBeTruthy();
+    expect(screen.queryByText('#42')).toBeNull();
   });
 
   it('tap logout opens ConfirmDialog with cancel and confirm', () => {

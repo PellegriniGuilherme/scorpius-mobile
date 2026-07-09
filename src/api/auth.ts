@@ -33,6 +33,7 @@ export interface DriverSession {
   name: string;
   whatsapp: string;
   company_id: number;
+  company_name?: string | null;
 }
 
 export interface OtpConfirmResponse {

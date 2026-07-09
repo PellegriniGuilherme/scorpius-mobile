@@ -203,6 +203,12 @@ export const ptBR = {
   },
   profile: {
     title: 'Meu perfil',
+    driverSubtitle: 'Motorista',
+    accountSection: 'Conta',
+    companyLabel: 'Empresa',
+    platformLabel: 'Plataforma Scorpius',
+    dangerZone: 'Sair da conta',
+    dangerZoneHint: 'Você precisará fazer login novamente para acessar suas entregas.',
     statusLabel: 'Status',
     whatsappLabel: 'WhatsApp',
     memberSinceLabel: 'Motorista desde',

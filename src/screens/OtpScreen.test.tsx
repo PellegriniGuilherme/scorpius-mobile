@@ -137,7 +137,7 @@ describe('OtpScreen countdown (T101)', () => {
     (authApi.confirmOtp as jest.Mock).mockResolvedValueOnce({
       access_token: 'mock-token',
       token_type: 'Bearer',
-      driver: { id: 91, name: 'Test', whatsapp: '+5511999998888', company_id: 1 },
+      driver: { id: 91, name: 'Test', whatsapp: '+5511999998888', company_id: 1, company_name: 'Acme Transportes' },
     });
     setRouteParams({ phone: '+5511999998888' });
     renderWithTheme(<OtpScreen />);

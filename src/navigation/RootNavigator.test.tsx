@@ -50,6 +50,7 @@ const DRIVER = {
   name: 'Motorista Teste',
   whatsapp: '+5511999998888',
   company_id: 1,
+  company_name: 'Acme Transportes',
 };
 
 // Mock @/api/client para que o bootstrap() do RootNavigator encontre
@@ -69,6 +70,7 @@ jest.mock('@/api/auth', () => ({
     name: 'Motorista Teste',
     whatsapp: '+5511999998888',
     company_id: 1,
+    company_name: 'Acme Transportes',
   }),
   requestOtp: jest.fn(),
   confirmOtp: jest.fn(),

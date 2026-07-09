@@ -32,7 +32,7 @@ describe('driver API route contracts', () => {
 
   it('auth confirm uses /driver/auth/otp/confirm', async () => {
     (authClient.post as jest.Mock).mockResolvedValue({
-      data: { access_token: 'x', refresh_token: 'y', driver: { id: 1, name: 'T', whatsapp: '+5511', company_id: 1 } },
+      data: { access_token: 'x', refresh_token: 'y', driver: { id: 1, name: 'T', whatsapp: '+5511', company_id: 1, company_name: 'Acme' } },
     });
     await confirmOtp('+5511999998888', '123456', 'device-1');
     expect(authClient.post).toHaveBeenCalledWith('/driver/auth/otp/confirm', {
@@ -44,7 +44,7 @@ describe('driver API route contracts', () => {
 
   it('fetchDriverMe uses /driver/auth/me', async () => {
     (apiClient.get as jest.Mock).mockResolvedValue({
-      data: { driver: { id: 1, name: 'T', whatsapp: '+5511', company_id: 1 } },
+      data: { driver: { id: 1, name: 'T', whatsapp: '+5511', company_id: 1, company_name: 'Acme' } },
     });
     await fetchDriverMe();
     expect(apiClient.get).toHaveBeenCalledWith('/driver/auth/me');
