@@ -2,7 +2,7 @@
  * Scorpius Move — Auth store (Zustand).
  */
 import { create } from 'zustand';
-import { loadAccessToken, registerSessionExpiredHandler } from '@/api/client';
+import { loadAccessToken, registerSessionExpiredHandler, waitForTokenHydration } from '@/api/client';
 import { fetchDriverMe, logoutDriver, type DriverSession } from '@/api/auth';
 import { unregisterDeviceToken } from '@/api/occurrenceTypes';
 import { getDeviceId } from '@/lib/deviceId';
@@ -30,6 +30,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   bootstrap: async () => {
     set({ isLoading: true, error: null });
     try {
+      await waitForTokenHydration();
       const token = await loadAccessToken();
       if (token == null) {
         set({ isLoading: false, isAuthenticated: false, driver: null });
@@ -48,7 +49,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   clearSession: async () => {
     syncWorker.stop();
-    const deviceId = await getDeviceId();
+    const deviceId = getDeviceId();
     await logoutDriver(deviceId);
     try {
       const { notifications } = await import('@/services/NotificationsService');

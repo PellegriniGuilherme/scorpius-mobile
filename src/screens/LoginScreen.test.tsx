@@ -46,10 +46,10 @@ describe('LoginScreen', () => {
     expect(screen.getByRole('button')).toBeTruthy();
   });
 
-  it('disables submit when phone is empty', () => {
+  it('disables submit only while loading', () => {
     renderWithTheme(<LoginScreen />);
     const btn = screen.getByRole('button');
-    expect(btn.props.accessibilityState.disabled).toBe(true);
+    expect(btn.props.accessibilityState.disabled).toBe(false);
   });
 
   it('enables submit when phone is valid (11 digits)', () => {
@@ -116,7 +116,6 @@ describe('LoginScreen', () => {
     fireEvent.press(screen.getByRole('button'));
 
     await waitFor(() => {
-      // ptBR.login.errorInvalidPhone é a mensagem exibida.
       expect(screen.getByText(/Informe um número de WhatsApp v\u00e1lido/i)).toBeTruthy();
     });
     expect(authApi.requestOtp).not.toHaveBeenCalled();

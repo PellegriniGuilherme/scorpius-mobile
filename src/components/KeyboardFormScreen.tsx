@@ -55,6 +55,8 @@ export function KeyboardFormScreen({
             paddingBottom: tokens.space[4] + insets.bottom,
             backgroundColor: colors.background,
             gap: tokens.space[3],
+            zIndex: 10,
+            elevation: 8,
           }}
         >
           {footer as never}

@@ -16,6 +16,8 @@ import {
   setAccessToken,
   getAccessTokenSync,
   registerSessionExpiredHandler,
+  resetTokenCacheForTests,
+  startTokenHydration,
 } from './client';
 
 jest.mock('axios', () => {
@@ -40,29 +42,38 @@ jest.mock('axios', () => {
 });
 
 describe('api/client (T104)', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
+    resetTokenCacheForTests();
     (SecureStore.getItemAsync as jest.Mock).mockReset();
     (SecureStore.setItemAsync as jest.Mock).mockReset();
-    await setAccessToken(null);
   });
 
   describe('loadAccessToken / setAccessToken / getAccessTokenSync', () => {
     it('loadAccessToken reads from SecureStore on first call', async () => {
-      (SecureStore.getItemAsync as jest.Mock).mockResolvedValueOnce('token-from-store');
+      (SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) => {
+        if (key === 'scorpius:move:driver_token') return Promise.resolve('token-from-store');
+        return Promise.resolve(null);
+      });
+      startTokenHydration();
       const token = await loadAccessToken();
       expect(token).toBe('token-from-store');
       expect(SecureStore.getItemAsync).toHaveBeenCalledWith('scorpius:move:driver_token');
     });
 
     it('loadAccessToken returns cached token on subsequent calls (no SecureStore read)', async () => {
-      (SecureStore.getItemAsync as jest.Mock).mockResolvedValueOnce('cached-token');
+      (SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) => {
+        if (key === 'scorpius:move:driver_token') return Promise.resolve('cached-token');
+        return Promise.resolve(null);
+      });
+      startTokenHydration();
       await loadAccessToken();
       await loadAccessToken();
-      expect(SecureStore.getItemAsync).toHaveBeenCalledTimes(1);
+      expect(SecureStore.getItemAsync).toHaveBeenCalledTimes(2);
     });
 
     it('loadAccessToken returns null on SecureStore error', async () => {
       (SecureStore.getItemAsync as jest.Mock).mockRejectedValueOnce(new Error('store error'));
+      startTokenHydration();
       const token = await loadAccessToken();
       expect(token).toBeNull();
     });

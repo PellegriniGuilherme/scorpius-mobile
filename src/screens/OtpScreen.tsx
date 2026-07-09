@@ -67,7 +67,7 @@ export function OtpScreen() {
     setError(null);
     setSubmitting(true);
     try {
-      const deviceId = await getDeviceId();
+      const deviceId = getDeviceId();
       const result = await confirmOtp(phone, code, deviceId);
       setSession(result.driver);
     } catch {
@@ -111,7 +111,7 @@ export function OtpScreen() {
             label={resendIn > 0 ? ptBR.otp.resendIn.replace('{seconds}', String(resendIn)) : ptBR.otp.resend}
             onPress={() => {
               void (async () => {
-                const deviceId = await getDeviceId();
+                const deviceId = getDeviceId();
                 try {
                   const response = await requestOtp(phone, deviceId);
                   setResendIn(RESEND_COOLDOWN_SEC);

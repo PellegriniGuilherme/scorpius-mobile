@@ -10,7 +10,8 @@
  *     c. 422 (phone inválido) → mostra erro de telefone
  *  3. OtpScreen confirma código via `POST /driver/auth/confirm`
  */
-import { useState } from 'react';
+import axios from 'axios';
+import { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -26,33 +27,45 @@ import { validateWhatsappInput } from './LoginScreen.validation';
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
+function isHttpStatus(error: unknown, status: number): boolean {
+  if (axios.isAxiosError(error)) {
+    return error.response?.status === status;
+  }
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    return (error as { response?: { status?: number } }).response?.status === status;
+  }
+  return false;
+}
+
 export function LoginScreen() {
   const navigation = useNavigation<Nav>();
   const { colors, tokens } = useTheme();
   const [phone, setPhone] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+
+  useEffect(() => {
+    submittingRef.current = false;
+    setSubmitting(false);
+  }, []);
 
   const trimmed = phone.replace(/\D/g, '');
   const isValid = validateWhatsappInput(phone);
 
-  /**
-   * T122 — gate check-phone.
-   * Backend decide se motorista existe antes de prosseguir.
-   * exists=true → requestOtp → OtpScreen
-   * exists=false → erro inline "Acesso não liberado" (sem navegação)
-   */
   async function handleSubmit() {
-    if (!isValid) {
-      setError(ptBR.login.errorInvalidPhone);
+    if (!isValid || submittingRef.current) {
+      if (!isValid) setError(ptBR.login.errorInvalidPhone);
       return;
     }
+
+    submittingRef.current = true;
     setError(null);
     setSubmitting(true);
-    try {
-      const deviceId = await getDeviceId();
-      const formattedPhone = `+${trimmed}`;
 
+    try {
+      const formattedPhone = `+${trimmed}`;
+      const deviceId = getDeviceId();
       const check = await checkPhone(formattedPhone);
 
       if (!check.exists) {
@@ -66,17 +79,13 @@ export function LoginScreen() {
         expiresIn: response.expires_in,
       });
     } catch (err) {
-      if (
-        typeof err === 'object' &&
-        err !== null &&
-        'response' in err &&
-        (err as { response?: { status?: number } }).response?.status === 422
-      ) {
+      if (isHttpStatus(err, 422)) {
         setError(ptBR.login.errorInvalidPhone);
       } else {
         setError(ptBR.login.errorGeneric);
       }
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
@@ -86,10 +95,11 @@ export function LoginScreen() {
       centered
       footer={
         <Button
+          testID="login-submit-button"
           label={submitting ? ptBR.login.submitting : ptBR.login.submit}
           onPress={handleSubmit}
           loading={submitting}
-          disabled={!isValid}
+          disabled={submitting}
           fullWidth
         />
       }
@@ -131,7 +141,10 @@ export function LoginScreen() {
           label={ptBR.login.whatsappLabel}
           placeholder={ptBR.login.whatsappPlaceholder}
           value={phone}
-          onChangeText={setPhone}
+          onChangeText={(value) => {
+            setPhone(value);
+            if (error) setError(null);
+          }}
           error={error ?? undefined}
         />
       </View>
