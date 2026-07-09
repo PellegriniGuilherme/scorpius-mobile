@@ -11,8 +11,8 @@ import { getApiBaseUrl, resolveBaseURL } from '@/api/config';
 import { SECURE_STORE_TIMEOUT_MS, withTimeout } from '@/lib/secureStoreTimeout';
 
 const TIMEOUT_MS = 30_000;
-const SECURE_STORE_TOKEN_KEY = 'scorpius:move:driver_token';
-const SECURE_STORE_REFRESH_KEY = 'scorpius:move:driver_refresh_token';
+const SECURE_STORE_TOKEN_KEY = 'scorpius.move.driver_token';
+const SECURE_STORE_REFRESH_KEY = 'scorpius.move.driver_refresh_token';
 const TOKEN_HYDRATION_WAIT_MS = 300;
 
 function createHttpClient(): AxiosInstance {

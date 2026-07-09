@@ -25,11 +25,13 @@ import { DetalheEntregaScreen } from '@/screens/DetalheEntregaScreen';
 import { MapaRotaScreen } from '@/screens/MapaRotaScreen';
 import { ComprovanteScreen } from '@/screens/ComprovanteScreen';
 import { ReportarOcorrenciaScreen } from '@/screens/ReportarOcorrenciaScreen';
+import { MarcarFalhaScreen } from '@/screens/MarcarFalhaScreen';
 import { PerfilMotoristaScreen } from '@/screens/PerfilMotoristaScreen';
 import { useAuthStore } from '@/store/auth';
 import { useTheme } from '@/theme/ThemeProvider';
 import { setupSyncWorker } from '@/api/boot';
 import { registerDeviceToken } from '@/api/occurrenceTypes';
+import { refreshOccurrenceTypesCache } from '@/services/occurrenceTypeService';
 import { syncWorker } from '@/services/SyncWorker';
 import { notifications } from '@/services/NotificationsService';
 import type { AuthStackParamList, AppStackParamList } from './types';
@@ -59,8 +61,9 @@ function AppFlow({ initial }: { initial?: keyof AppStackParamList }) {
       <AppStack.Screen name="HomeMotorista" component={HomeMotoristaScreen} options={{ title: 'Scorpius Move', headerShown: false }} />
       <AppStack.Screen name="DetalheEntrega" component={DetalheEntregaScreen} options={{ title: 'Entrega' }} />
       <AppStack.Screen name="MapaRota" component={MapaRotaScreen} options={{ title: 'Rota' }} />
-      <AppStack.Screen name="Comprovante" component={ComprovanteScreen} options={{ title: 'Comprovante' }} />
+      <AppStack.Screen name="Comprovante" component={ComprovanteScreen} options={{ title: 'Finalizar entrega' }} />
       <AppStack.Screen name="ReportarOcorrencia" component={ReportarOcorrenciaScreen} options={{ title: 'Ocorrência' }} />
+      <AppStack.Screen name="MarcarFalha" component={MarcarFalhaScreen} options={{ title: 'Marcar falha' }} />
       <AppStack.Screen name="PerfilMotorista" component={PerfilMotoristaScreen} options={{ title: 'Perfil' }} />
     </AppStack.Navigator>
   );
@@ -128,7 +131,7 @@ function PreviewFlow({ screen }: { screen: PreviewScreen }) {
         <AppStack.Screen name="HomeMotorista" component={HomeMotoristaScreen} options={{ title: 'Scorpius Move', headerShown: false }} />
         <AppStack.Screen name="DetalheEntrega" component={DetalheEntregaScreen} options={{ title: 'Entrega #SC-1001' }} initialParams={initial === 'DetalheEntrega' ? (initialParams as never) : undefined} />
         <AppStack.Screen name="MapaRota" component={MapaRotaScreen} options={{ title: 'Rota' }} initialParams={initial === 'MapaRota' ? (initialParams as never) : undefined} />
-        <AppStack.Screen name="Comprovante" component={ComprovanteScreen} options={{ title: 'Comprovante' }} initialParams={initial === 'Comprovante' ? (initialParams as never) : undefined} />
+        <AppStack.Screen name="Comprovante" component={ComprovanteScreen} options={{ title: 'Finalizar entrega' }} initialParams={initial === 'Comprovante' ? (initialParams as never) : undefined} />
         <AppStack.Screen name="PerfilMotorista" component={PerfilMotoristaScreen} options={{ title: 'Perfil' }} />
       </AppStack.Navigator>
     </NavigationContainer>
@@ -163,6 +166,7 @@ export function RootNavigator() {
       return;
     }
     void syncWorker.start();
+    void refreshOccurrenceTypesCache();
     if (!driver) return;
     void (async () => {
       const reg = await notifications.registerForPushNotificationsAsync();

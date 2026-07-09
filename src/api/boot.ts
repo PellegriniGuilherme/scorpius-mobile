@@ -6,6 +6,7 @@ import {
   requestProofUploadUrl,
   storeDeliveryProof,
 } from '@/api/deliveries';
+import { applyServerDelivery } from '@/services/deliveryMutationService';
 import { syncWorker, type ApiClient, type ProofUploadPayload } from '@/services/SyncWorker';
 
 async function uploadBinaryToPresignedUrl(localUri: string, uploadUrl: string, contentType: string): Promise<string> {
@@ -31,22 +32,39 @@ export function createProofUploadAdapter(): ApiClient {
       const idempotencyKey = options?.idempotencyKey ?? crypto.randomUUID();
       void idempotencyKey;
 
-      const photoPresign = await requestProofUploadUrl(payload.deliveryId, 'proof_of_delivery', 'image/jpeg');
-      const photoUrl = await uploadBinaryToPresignedUrl(
-        payload.photoPath,
-        photoPresign.url,
-        photoPresign.content_type,
-      );
+      let photoUrl: string | undefined;
+      if (payload.photoPath) {
+        const photoPresign = await requestProofUploadUrl(payload.deliveryId, 'proof_of_delivery', 'image/jpeg');
+        photoUrl = await uploadBinaryToPresignedUrl(
+          payload.photoPath,
+          photoPresign.url,
+          photoPresign.content_type,
+        );
+      }
 
-      await storeDeliveryProof(payload.deliveryId, {
-        photo_url: photoUrl,
-        signature_url: null,
-      });
+      let signatureUrl: string | undefined;
+      if (payload.signaturePath) {
+        const signaturePresign = await requestProofUploadUrl(payload.deliveryId, 'signature', 'image/png');
+        signatureUrl = await uploadBinaryToPresignedUrl(
+          payload.signaturePath,
+          signaturePresign.url,
+          signaturePresign.content_type,
+        );
+      }
 
-      await completeDelivery(payload.deliveryId, {
-        photo_url: photoUrl,
-        notes: payload.signatureName ? `Assinado por: ${payload.signatureName}` : undefined,
+      if (photoUrl || signatureUrl) {
+        await storeDeliveryProof(payload.deliveryId, {
+          ...(photoUrl ? { photo_url: photoUrl } : {}),
+          ...(signatureUrl ? { signature_url: signatureUrl } : {}),
+        });
+      }
+
+      const updated = await completeDelivery(payload.deliveryId, {
+        ...(photoUrl ? { photo_url: photoUrl } : {}),
+        ...(signatureUrl ? { signature_url: signatureUrl } : {}),
+        ...(payload.signatureName ? { notes: `Assinado por: ${payload.signatureName}` } : {}),
       });
+      await applyServerDelivery(updated);
     },
   };
 }
@@ -65,7 +83,25 @@ export function createSyncApiClient(): ApiClient {
     },
     async uploadOccurrence(payload) {
       const { ingestOccurrences } = await import('@/api/sync');
-      await ingestOccurrences(payload.batchId, [payload.occurrence]);
+      const { requestProofUploadUrl } = await import('@/api/deliveries');
+
+      let photoPaths = payload.occurrence.photo_paths;
+      if (payload.photoPath) {
+        const presign = await requestProofUploadUrl(
+          payload.occurrence.delivery_id,
+          'occurrence_photo',
+          'image/jpeg',
+        );
+        await uploadBinaryToPresignedUrl(payload.photoPath, presign.url, presign.content_type);
+        photoPaths = [presign.key];
+      }
+
+      await ingestOccurrences(payload.batchId, [
+        {
+          ...payload.occurrence,
+          photo_paths: photoPaths,
+        },
+      ]);
     },
   };
 }

@@ -57,7 +57,7 @@ export interface PresignedUploadResponse {
 
 export async function requestProofUploadUrl(
   deliveryId: number,
-  documentType: 'proof_of_delivery' | 'signature',
+  documentType: 'proof_of_delivery' | 'signature' | 'occurrence_photo',
   contentType: 'image/jpeg' | 'image/png' = 'image/jpeg',
 ): Promise<PresignedUploadResponse> {
   const { data } = await apiClient.post<{ data: PresignedUploadResponse }>(
@@ -69,7 +69,7 @@ export async function requestProofUploadUrl(
 
 export async function storeDeliveryProof(
   deliveryId: number,
-  payload: { photo_url: string; signature_url?: string | null },
+  payload: { photo_url?: string; signature_url?: string | null },
 ): Promise<void> {
   await apiClient.post(`/driver/deliveries/${deliveryId}/proof`, payload);
 }

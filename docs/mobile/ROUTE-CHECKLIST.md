@@ -39,8 +39,10 @@ Auth driver: header `Authorization: Bearer {access_token}`
 
 1. `POST /driver/deliveries/{id}/upload-url` `{ document_type: proof_of_delivery, content_type: image/jpeg }`
 2. `PUT {presigned_url}` binary JPEG
-3. `POST /driver/deliveries/{id}/proof` `{ photo_url, signature_url? }`
-4. `POST /driver/deliveries/{id}/complete` `{ notes? }`
+3. `POST /driver/deliveries/{id}/proof` `{ photo_url?, signature_url? }` — condicional a `proof_requirements`
+4. `POST /driver/deliveries/{id}/complete` `{ photo_url?, signature_url?, notes? }`
+
+`GET /driver/deliveries/{id}` expõe `proof_requirements` (definido pelo Hub/ERP via API Key em `POST/PATCH /deliveries`).
 
 Implementado em `src/api/boot.ts` + outbox `proof_upload`.
 

@@ -22,6 +22,10 @@ export function mockDeliveryToApi(m: (typeof MOCK_DELIVERIES)[number]): Delivery
     package_count: m.items.reduce((sum, item) => sum + item.quantity, 0),
     weight_kg: null,
     notes: null,
+    proof_requirements:
+      m.id === 1001
+        ? { requires_photo: true, requires_signature: true }
+        : { requires_photo: false, requires_signature: false },
     created_at: m.scheduled_for,
     updated_at: m.scheduled_for,
   };

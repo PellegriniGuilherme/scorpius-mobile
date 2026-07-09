@@ -33,6 +33,17 @@ describe('MapaRotaScreen', () => {
       extra: { googleMapsApiKey: 'test-google-maps-key' },
     };
     Platform.OS = 'ios';
+    global.fetch = jest.fn().mockResolvedValue({
+      json: async () => ({
+        status: 'OK',
+        routes: [
+          {
+            overview_polyline: { points: '_p~iF~ps|U_ulLnnqC_mqNvxq`@' },
+            legs: [{ distance: { value: 5200 }, duration: { value: 900 } }],
+          },
+        ],
+      }),
+    });
   });
 
   it('renders mapa with route title and destination address', async () => {
@@ -75,8 +86,8 @@ describe('MapaRotaScreen', () => {
   it('shows distance and duration cards', async () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<MapaRotaScreen />);
-    expect(await screen.findByText(/\d+\.\d km/)).toBeTruthy();
-    expect(screen.getByText(/\d+ min/)).toBeTruthy();
+    expect(await screen.findByText('5.2 km')).toBeTruthy();
+    expect(screen.getByText('15 min')).toBeTruthy();
   });
 
   it('opens Google Maps with destination when button pressed', async () => {

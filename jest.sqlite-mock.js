@@ -18,6 +18,13 @@ class MockStatement {
   }
 }
 
+function normalizeBindParams(params) {
+  if (params.length === 1 && Array.isArray(params[0])) {
+    return params[0];
+  }
+  return params;
+}
+
 class MockDatabase {
   constructor() {
     this.tables = new Map();
@@ -59,9 +66,21 @@ class MockDatabase {
    * do SELECT (ou null se vazio). Usado por OutboxService.init para
    * detectar migrations pendentes.
    */
-  getFirstAsync(source) {
+  getFirstAsync(source, ...params) {
+    const bindParams = normalizeBindParams(params);
     const stmt = new MockStatement(source, this);
-    return stmt.executeAsync([]).then((res) => res.getFirstAsync());
+    return stmt.executeAsync(bindParams).then((res) => res.getFirstAsync());
+  }
+
+  runAsync(source, ...params) {
+    const bindParams = normalizeBindParams(params);
+    return this.execute(source, bindParams).then(() => undefined);
+  }
+
+  getAllAsync(source, ...params) {
+    const bindParams = normalizeBindParams(params);
+    const stmt = new MockStatement(source, this);
+    return stmt.executeAsync(bindParams).then((res) => res.getAllAsync());
   }
 
   closeAsync() {
@@ -71,9 +90,10 @@ class MockDatabase {
   }
 
   async execute(sql, params) {
-    const upper = sql.toUpperCase().trim();
-    if (upper.startsWith('INSERT INTO')) {
-      return this.execInsert(sql, params);
+    const normalized = sql.replace(/\s+/g, ' ').trim();
+    const upper = normalized.toUpperCase();
+    if (upper.startsWith('INSERT')) {
+      return this.execInsert(normalized, params);
     }
     if (upper.startsWith('UPDATE')) {
       return this.execUpdate(sql, params);
@@ -100,10 +120,10 @@ class MockDatabase {
   }
 
   execInsert(sql, params) {
-    const tableName = sql.match(/INSERT INTO\s+(\w+)/i)[1];
+    const tableName = sql.match(/INSERT(?:\s+OR\s+REPLACE)?\s+INTO\s+(\w+)/i)[1];
     const rows = this.tables.get(tableName) || [];
     const row = {};
-    const columnsMatch = sql.match(/INSERT INTO\s+\w+\s*\(([^)]+)\)/i);
+    const columnsMatch = sql.match(/INSERT(?:\s+OR\s+REPLACE)?\s+INTO\s+\w+\s*\(([^)]+)\)/i);
     const valuesMatch = sql.match(/VALUES\s*\(([^)]+)\)/i);
     if (columnsMatch && valuesMatch) {
       const columns = columnsMatch[1].split(',').map((c) => c.trim());
@@ -127,7 +147,22 @@ class MockDatabase {
         }
       });
     }
-    const id = this.nextId++;
+
+    const isReplace = /INSERT\s+OR\s+REPLACE/i.test(sql);
+    if (isReplace && row.id !== undefined) {
+      const existingIdx = rows.findIndex((r) => r.id === row.id);
+      if (existingIdx >= 0) {
+        rows[existingIdx] = { ...rows[existingIdx], ...row };
+        this.tables.set(tableName, rows);
+        return {
+          lastInsertRowId: row.id,
+          changes: 1,
+          getAllAsync: async () => rows,
+        };
+      }
+    }
+
+    const id = row.id ?? this.nextId++;
     row.id = id;
     rows.push(row);
     this.tables.set(tableName, rows);

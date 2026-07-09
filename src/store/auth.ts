@@ -12,6 +12,7 @@ import { fetchDriverMe, logoutDriver, type DriverSession } from '@/api/auth';
 import { unregisterDeviceToken } from '@/api/occurrenceTypes';
 import { getDeviceId } from '@/lib/deviceId';
 import { deliveryCache } from '@/services/DeliveryCacheService';
+import { occurrenceTypeCache } from '@/services/OccurrenceTypeCacheService';
 import { syncWorker } from '@/services/SyncWorker';
 
 interface AuthState {
@@ -70,6 +71,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       // best-effort push unregister
     }
     await deliveryCache.clear();
+    await occurrenceTypeCache.clear();
     set({ driver: null, isAuthenticated: false, isLoading: false, error: null });
   },
 

@@ -4,6 +4,8 @@ import {
   inTransitDelivery,
   startDelivery,
 } from '@/api/deliveries';
+import { applyServerDelivery } from '@/services/deliveryMutationService';
+import type { DeliveryApi } from '@/types/delivery';
 
 export interface DeliveryActionPayload {
   deliveryId: number;
@@ -12,21 +14,24 @@ export interface DeliveryActionPayload {
   notes?: string;
 }
 
-export async function executeDeliveryActionOnline(payload: DeliveryActionPayload): Promise<void> {
+export async function executeDeliveryActionOnline(payload: DeliveryActionPayload): Promise<DeliveryApi> {
+  let updated: DeliveryApi;
   switch (payload.action) {
     case 'start':
-      await startDelivery(payload.deliveryId);
+      updated = await startDelivery(payload.deliveryId);
       break;
     case 'in_transit':
-      await inTransitDelivery(payload.deliveryId);
+      updated = await inTransitDelivery(payload.deliveryId);
       break;
     case 'fail':
-      await failDelivery(payload.deliveryId, payload.reason ?? 'Falha reportada pelo motorista');
+      updated = await failDelivery(payload.deliveryId, payload.reason ?? 'Falha reportada pelo motorista');
       break;
     case 'complete':
-      await completeDelivery(payload.deliveryId, { notes: payload.notes });
+      updated = await completeDelivery(payload.deliveryId, { notes: payload.notes });
       break;
     default:
       throw new Error(`Unknown delivery action: ${payload.action}`);
   }
+  await applyServerDelivery(updated);
+  return updated;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Platform, ScrollView, Text, View, Image, ActivityIndicator } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import Constants from 'expo-constants';
@@ -8,6 +8,8 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { fetchDeliveryWithCache } from '@/services/deliveryService';
 import { mapDelivery } from '@/lib/mapDelivery';
+import { fetchDrivingRouteWithCache, type DrivingRoute, type LatLng } from '@/lib/googleDirections';
+import type { MapCoordinate } from '@/lib/decodePolyline';
 import type { DeliveryViewModel } from '@/types/delivery';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
@@ -15,41 +17,31 @@ import type { AppStackParamList } from '@/navigation/types';
 
 type Route_ = RouteProp<AppStackParamList, 'MapaRota'>;
 
-interface LatLng {
-  lat: number;
-  lng: number;
-}
-
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-}
-
 function getGoogleMapsApiKey(): string {
   return (Constants.expoConfig?.extra as { googleMapsApiKey?: string } | undefined)?.googleMapsApiKey ?? '';
 }
 
-function buildStaticMapUrl(dest: LatLng, apiKey: string): string {
+function buildStaticMapUrl(dest: LatLng, apiKey: string, encodedRoute?: string): string {
   const { lat, lng } = dest;
   const params = new URLSearchParams({
     center: `${lat},${lng}`,
-    zoom: '15',
+    zoom: '14',
     size: '640x480',
     scale: '2',
     markers: `color:red|${lat},${lng}`,
     key: apiKey,
   });
+  if (encodedRoute) {
+    params.set('path', `weight:4|color:0x2563eb|enc:${encodedRoute}`);
+  }
   return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
 }
 
 function MapPanel({
   dest,
   origin,
+  route,
+  loadingRoute,
   apiKey,
   colors,
   tokens,
@@ -57,34 +49,41 @@ function MapPanel({
 }: {
   dest: LatLng;
   origin: LatLng | null;
+  route: DrivingRoute | null;
+  loadingRoute: boolean;
   apiKey: string;
   colors: ReturnType<typeof useTheme>['colors'];
   tokens: ReturnType<typeof useTheme>['tokens'];
   customerName: string;
 }) {
+  const mapRef = useRef<MapView>(null);
+
   const region = useMemo(
     () => ({
       latitude: dest.lat,
       longitude: dest.lng,
-      latitudeDelta: 0.04,
-      longitudeDelta: 0.04,
+      latitudeDelta: 0.06,
+      longitudeDelta: 0.06,
     }),
     [dest.lat, dest.lng],
   );
 
-  const polyline = origin
-    ? [
-        { latitude: origin.lat, longitude: origin.lng },
-        { latitude: dest.lat, longitude: dest.lng },
-      ]
-    : [];
+  const routeCoordinates: MapCoordinate[] = route?.coordinates ?? [];
+
+  useEffect(() => {
+    if (!mapRef.current || routeCoordinates.length < 2) return;
+    mapRef.current.fitToCoordinates(routeCoordinates, {
+      edgePadding: { top: 48, right: 48, bottom: 48, left: 48 },
+      animated: true,
+    });
+  }, [routeCoordinates]);
 
   if (!apiKey) {
     return (
       <View
         testID="map-fallback"
         style={{
-          height: 240,
+          height: 280,
           borderRadius: tokens.radius.lg,
           borderWidth: 1,
           borderColor: colors.borderDefault,
@@ -105,7 +104,7 @@ function MapPanel({
     return (
       <View
         style={{
-          height: 240,
+          height: 280,
           borderRadius: tokens.radius.lg,
           overflow: 'hidden',
           borderWidth: 1,
@@ -114,7 +113,7 @@ function MapPanel({
       >
         <Image
           testID="google-static-map"
-          source={{ uri: buildStaticMapUrl(dest, apiKey) }}
+          source={{ uri: buildStaticMapUrl(dest, apiKey, route?.encodedPolyline) }}
           style={{ width: '100%', height: '100%' }}
           resizeMode="cover"
         />
@@ -125,7 +124,7 @@ function MapPanel({
   return (
     <View
       style={{
-        height: 240,
+        height: 280,
         borderRadius: tokens.radius.lg,
         overflow: 'hidden',
         borderWidth: 1,
@@ -133,6 +132,7 @@ function MapPanel({
       }}
     >
       <MapView
+        ref={mapRef}
         testID="google-map"
         provider={PROVIDER_GOOGLE}
         style={{ width: '100%', height: '100%' }}
@@ -153,10 +153,29 @@ function MapPanel({
           title={ptBR.map.destination}
           description={customerName}
         />
-        {polyline.length === 2 && (
-          <Polyline testID="map-route-polyline" coordinates={polyline} strokeColor="#2563eb" strokeWidth={3} />
+        {routeCoordinates.length > 1 && (
+          <Polyline
+            testID="map-route-polyline"
+            coordinates={routeCoordinates}
+            strokeColor="#2563eb"
+            strokeWidth={4}
+          />
         )}
       </MapView>
+      {loadingRoute && (
+        <View
+          style={{
+            position: 'absolute',
+            top: tokens.space[2],
+            right: tokens.space[2],
+            backgroundColor: colors.surfacePanel,
+            borderRadius: tokens.radius.md,
+            padding: tokens.space[2],
+          }}
+        >
+          <ActivityIndicator color={colors.accent} size="small" />
+        </View>
+      )}
     </View>
   );
 }
@@ -167,6 +186,9 @@ export function MapaRotaScreen() {
   const [delivery, setDelivery] = useState<DeliveryViewModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
+  const [drivingRoute, setDrivingRoute] = useState<DrivingRoute | null>(null);
+  const [loadingRoute, setLoadingRoute] = useState(false);
+  const [routeFromCache, setRouteFromCache] = useState(false);
   const apiKey = getGoogleMapsApiKey();
 
   useEffect(() => {
@@ -185,6 +207,30 @@ export function MapaRotaScreen() {
       setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
     })();
   }, []);
+
+  useEffect(() => {
+    if (!userLocation || !delivery || !apiKey) {
+      setDrivingRoute(null);
+      return;
+    }
+
+    const destCoords: LatLng = { lat: delivery.address.lat, lng: delivery.address.lng };
+    let cancelled = false;
+
+    void (async () => {
+      setLoadingRoute(true);
+      const { route: result, fromCache } = await fetchDrivingRouteWithCache(userLocation, destCoords, apiKey);
+      if (!cancelled) {
+        setDrivingRoute(result);
+        setRouteFromCache(fromCache);
+        setLoadingRoute(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userLocation, delivery, apiKey]);
 
   if (loading) {
     return (
@@ -205,12 +251,14 @@ export function MapaRotaScreen() {
   const dest = delivery.address;
   const destCoords: LatLng = { lat: dest.lat, lng: dest.lng };
   const origin = userLocation;
-  const km = origin ? haversineKm(origin.lat, origin.lng, dest.lat, dest.lng) : null;
-  const min = km != null ? Math.max(5, Math.round((km / 30) * 60)) : null;
+  const km = drivingRoute?.distanceKm ?? null;
+  const min = drivingRoute?.durationMin ?? null;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView contentContainerStyle={{ padding: tokens.space[6], gap: tokens.space[5] }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.background }}
+      contentContainerStyle={{ padding: tokens.space[6], gap: tokens.space[5] }}
+    >
         <Text style={{ fontSize: tokens.text['2xl'], fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
           {ptBR.map.title}
         </Text>
@@ -218,6 +266,8 @@ export function MapaRotaScreen() {
         <MapPanel
           dest={destCoords}
           origin={origin}
+          route={drivingRoute}
+          loadingRoute={loadingRoute}
           apiKey={apiKey}
           colors={colors}
           tokens={tokens}
@@ -239,6 +289,16 @@ export function MapaRotaScreen() {
               {min != null ? ptBR.map.duration.replace('{min}', String(min)) : '— min'}
             </Text>
           </View>
+          {loadingRoute && (
+            <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs, textAlign: 'center', marginTop: tokens.space[2] }}>
+              {ptBR.map.calculatingRoute}
+            </Text>
+          )}
+          {!loadingRoute && routeFromCache && drivingRoute && (
+            <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs, textAlign: 'center', marginTop: tokens.space[2] }}>
+              {ptBR.map.routeFromCache}
+            </Text>
+          )}
         </Card>
 
         <Button
@@ -246,11 +306,11 @@ export function MapaRotaScreen() {
           variant="secondary"
           fullWidth
           onPress={() => {
-            const url = `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}`;
+            const originParam = origin ? `&origin=${origin.lat},${origin.lng}` : '';
+            const url = `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}${originParam}&travelmode=driving`;
             void Linking.openURL(url).catch(() => undefined);
           }}
         />
-      </ScrollView>
     </ScrollView>
   );
 }

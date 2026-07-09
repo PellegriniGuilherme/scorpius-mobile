@@ -24,6 +24,16 @@ export interface DeliveryAddress {
   longitude?: number;
 }
 
+export interface ProofRequirements {
+  requires_photo: boolean;
+  requires_signature: boolean;
+}
+
+export interface DeliveryFailure {
+  failed_at: string | null;
+  reason: string;
+}
+
 export interface DeliveryApi {
   id: number;
   company_id: number;
@@ -37,6 +47,8 @@ export interface DeliveryApi {
   package_count: number;
   weight_kg: number | null;
   notes: string | null;
+  failure?: DeliveryFailure | null;
+  proof_requirements?: ProofRequirements;
   created_at: string;
   updated_at: string;
 }
@@ -62,6 +74,8 @@ export interface DeliveryViewModel {
   windowStart: string;
   windowEnd: string;
   notes: string | null;
+  failureReason: string | null;
+  proofRequirements: ProofRequirements;
 }
 
 export interface DeliveryListResponse {

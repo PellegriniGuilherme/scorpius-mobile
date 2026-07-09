@@ -5,7 +5,7 @@
  *  - render com deliveryId param
  *  - tap "Capturar foto" (com mock de image-picker retornando foto) muda estado
  *  - "Entrega não encontrada" para id inválido
- *  - "Confirmar entrega" enabled apenas com foto + signature ≥3 chars
+ *  - "Finalizar entrega" enabled apenas com foto + signature ≥3 chars
  *  - submit enfileira no OutboxService e mostra tela de sucesso
  *  - sync status "pending" enquanto outbox tem o item
  *  - sync status "failed" se item foi para DLQ (next_retry_at = 0)
@@ -17,6 +17,32 @@ import * as ImagePicker from 'expo-image-picker';
 import { outbox } from '@/services/OutboxService';
 import { syncWorker } from '@/services/SyncWorker';
 import { __resetMockDb } from '../../jest.sqlite-mock.js';
+
+jest.mock('@/components/SignaturePad', () => {
+  const mockReact = jest.requireActual('react');
+  const { View, Pressable, Text } = jest.requireActual('react-native');
+  return {
+    SignaturePad: mockReact.forwardRef((props: { onChange?: (v: boolean) => void }, ref: unknown) => {
+      mockReact.useImperativeHandle(ref, () => ({
+        clear: jest.fn(),
+        isEmpty: () => false,
+        captureToCacheFile: jest.fn().mockResolvedValue('file:///cache/proofs/mock-sig.png'),
+      }));
+      return mockReact.createElement(
+        View,
+        { testID: 'proof-signature-pad-mock' },
+        mockReact.createElement(
+          Pressable,
+          {
+            testID: 'mock-sign',
+            onPress: () => props.onChange?.(true),
+          },
+          mockReact.createElement(Text, null, 'Assinar'),
+        ),
+      );
+    }),
+  };
+});
 
 jest.mock('@react-navigation/native', () => {
   const mockReal = jest.requireActual('@react-navigation/native');
@@ -60,7 +86,8 @@ describe('ComprovanteScreen', () => {
     renderWithTheme(<ComprovanteScreen />);
     await waitFor(() => {
       expect(screen.getByText('Aguardando captura')).toBeTruthy();
-      expect(screen.getByText('Assinatura do destinatário')).toBeTruthy();
+      expect(screen.getByText(/Área de assinatura/)).toBeTruthy();
+      expect(screen.getByLabelText('Nome do destinatário')).toBeTruthy();
     });
   });
 
@@ -70,35 +97,46 @@ describe('ComprovanteScreen', () => {
     expect(await screen.findByText('Entrega não encontrada.')).toBeTruthy();
   });
 
-  it('tap "Capturar foto" (mock success) updates visual state', async () => {
+  it('tap "Capturar foto" (mock success) shows photo preview', async () => {
     await setupHappyPathPickPhoto();
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ComprovanteScreen />);
     fireEvent.press(await screen.findByText('Capturar foto'));
+    fireEvent.press(screen.getByTestId('mock-sign'));
     await waitFor(() => {
-      expect(screen.getByText('Foto capturada')).toBeTruthy();
+      expect(screen.getByTestId('proof-photo-preview')).toBeTruthy();
       expect(screen.getByText('Tirar novamente')).toBeTruthy();
     });
     expect(ImagePicker.launchCameraAsync).toHaveBeenCalled();
   });
 
-  it('"Confirmar entrega" disabled without photo or signature', async () => {
+  it('"Finalizar entrega" disabled without photo or signature', async () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ComprovanteScreen />);
-    const submitBtn = await screen.findByRole('button', { name: 'Confirmar entrega' });
+    const submitBtn = await screen.findByRole('button', { name: 'Finalizar entrega' });
     expect(submitBtn.props.accessibilityState?.disabled).toBe(true);
   });
 
-  it('"Confirmar entrega" enabled with photo + signature (≥3 chars)', async () => {
+  it('"Finalizar entrega" enabled with photo + signature (≥3 chars)', async () => {
     await setupHappyPathPickPhoto();
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ComprovanteScreen />);
     fireEvent.press(await screen.findByText('Capturar foto'));
+    fireEvent.press(screen.getByTestId('mock-sign'));
     await waitFor(() => expect(screen.getByText('Tirar novamente')).toBeTruthy());
-    const input = screen.getByLabelText('Assinatura do destinatário');
+    const input = screen.getByLabelText('Nome do destinatário');
     fireEvent.changeText(input, 'João da Silva');
-    const submitBtn = screen.getByRole('button', { name: 'Confirmar entrega' });
+    const submitBtn = screen.getByRole('button', { name: 'Finalizar entrega' });
     expect(submitBtn.props.accessibilityState?.disabled).toBe(false);
+  });
+
+  it('"Finalizar entrega" enabled without proof when delivery has no requirements', async () => {
+    setRouteParams({ deliveryId: 1002 });
+    renderWithTheme(<ComprovanteScreen />);
+    const submitBtn = await screen.findByRole('button', { name: 'Finalizar entrega' });
+    expect(submitBtn.props.accessibilityState?.disabled).toBe(false);
+    expect(screen.queryByText('Capturar foto')).toBeNull();
+    expect(screen.queryByText('Área de assinatura')).toBeNull();
   });
 
   it('submit enqueues to outbox and shows success screen', async () => {
@@ -107,12 +145,13 @@ describe('ComprovanteScreen', () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ComprovanteScreen />);
     fireEvent.press(await screen.findByText('Capturar foto'));
+    fireEvent.press(screen.getByTestId('mock-sign'));
     await waitFor(() => expect(screen.getByText('Tirar novamente')).toBeTruthy());
-    const input = screen.getByLabelText('Assinatura do destinatário');
+    const input = screen.getByLabelText('Nome do destinatário');
     fireEvent.changeText(input, 'João da Silva');
-    fireEvent.press(screen.getByText('Confirmar entrega'));
+    fireEvent.press(screen.getByRole('button', { name: 'Finalizar entrega' }));
     await waitFor(() => {
-      expect(screen.getByText('Entrega confirmada!')).toBeTruthy();
+      expect(screen.getByText('Entrega finalizada!')).toBeTruthy();
     });
     // Outbox foi consumido pelo SyncWorker (api.successUpload)
     const remaining = await outbox.getAll();
@@ -127,10 +166,11 @@ describe('ComprovanteScreen', () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ComprovanteScreen />);
     fireEvent.press(await screen.findByText('Capturar foto'));
+    fireEvent.press(screen.getByTestId('mock-sign'));
     await waitFor(() => expect(screen.getByText('Tirar novamente')).toBeTruthy());
-    const input = screen.getByLabelText('Assinatura do destinatário');
+    const input = screen.getByLabelText('Nome do destinatário');
     fireEvent.changeText(input, 'João da Silva');
-    fireEvent.press(screen.getByText('Confirmar entrega'));
+    fireEvent.press(screen.getByRole('button', { name: 'Finalizar entrega' }));
     await waitFor(() => {
       // Após MAX_ATTEMPTS tentativas (5) o item vai para DLQ
       // Como tick é chamado 1x, o item fica pending com attempts=1
@@ -160,6 +200,7 @@ describe('ComprovanteScreen DLQ UI (T098)', () => {
     const id = await outbox.enqueue('proof_upload', {
       deliveryId: 5000,
       photoPath: '/cache/x.jpg',
+      signaturePath: '/cache/x-sig.png',
       signatureName: 'tester',
     });
     for (let i = 0; i < 5; i++) {
@@ -192,6 +233,7 @@ describe('ComprovanteScreen DLQ UI (T098)', () => {
     const id = await outbox.enqueue('proof_upload', {
       deliveryId: 6000,
       photoPath: '/cache/y.jpg',
+      signaturePath: '/cache/y-sig.png',
       signatureName: 'retryme',
     });
     for (let i = 0; i < 5; i++) {

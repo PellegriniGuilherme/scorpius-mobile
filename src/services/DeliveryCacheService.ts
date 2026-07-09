@@ -52,10 +52,41 @@ export class DeliveryCacheService {
     return row ? (JSON.parse(row.payload) as DeliveryApi) : null;
   }
 
+  async patchStatus(id: number, status: DeliveryApi['status']): Promise<DeliveryApi | null> {
+    const existing = await this.getById(id);
+    if (!existing) return null;
+    const patched = { ...existing, status };
+    await this.upsertOne(patched);
+    return patched;
+  }
+
+  async patchFailure(id: number, reason: string): Promise<DeliveryApi | null> {
+    const existing = await this.getById(id);
+    if (!existing) return null;
+    const patched: DeliveryApi = {
+      ...existing,
+      status: 'failed',
+      failure: {
+        failed_at: new Date().toISOString(),
+        reason,
+      },
+    };
+    await this.upsertOne(patched);
+    return patched;
+  }
+
   async clear(): Promise<void> {
     const db = await this.getDb();
     await db.runAsync('DELETE FROM deliveries_cache');
   }
+
+  _resetForTests(): void {
+    this.db = null;
+  }
 }
 
 export const deliveryCache = new DeliveryCacheService();
+
+export function _resetDeliveryCacheForTests(): void {
+  deliveryCache._resetForTests();
+}

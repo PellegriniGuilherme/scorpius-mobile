@@ -68,7 +68,7 @@ describe('deviceId', () => {
     await jest.advanceTimersByTimeAsync(SECURE_STORE_TIMEOUT_MS);
 
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-      'scorpius:move:device_id',
+      'scorpius.move.device_id',
       id,
     );
   });

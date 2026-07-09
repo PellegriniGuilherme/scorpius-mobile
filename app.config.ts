@@ -15,6 +15,7 @@ import type { ExpoConfig, ConfigContext } from 'expo/config';
  *  - T082: EAS project ID fixo criado em 2026-06-21 (`eas init`).
  *    Bundle IDs internacional `com.scorpius.move` (decisão Guilherme 12:26).
  *    Google Maps config iOS/Android com chaves separadas.
+ *  - FCM: `google-services.json` na raiz (gitignored) + `android.googleServicesFile`.
  */
 const config: ExpoConfig = {
   name: 'Scorpius Move',
@@ -49,6 +50,8 @@ const config: ExpoConfig = {
   android: {
     // T082: bundle id internacional (decisão Guilherme 12:26)
     package: 'com.scorpius.move',
+    // FCM / Expo Push (Android): Firebase google-services.json na raiz do projeto
+    googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './google-services.json',
     softwareKeyboardLayoutMode: 'resize',
     // T082: Google Maps API key Android nativo
     config: {
@@ -84,6 +87,15 @@ const config: ExpoConfig = {
       {
         icon: './assets/notification-icon.png',
         color: '#0b1220',
+      },
+    ],
+    // Google Maps nativo: injeta com.google.android.geo.API_KEY no AndroidManifest
+    [
+      'react-native-maps',
+      {
+        androidGoogleMapsApiKey:
+          process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID ?? '',
+        iosGoogleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS ?? '',
       },
     ],
   ],

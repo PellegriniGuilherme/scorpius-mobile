@@ -39,6 +39,7 @@ yarn-error.*
 .env
 .env.local
 .env.*.local
+google-services.json
 
 # Bundle artifacts
 *.jsbundle

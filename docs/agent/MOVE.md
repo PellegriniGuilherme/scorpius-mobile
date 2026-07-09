@@ -87,7 +87,7 @@ Boot (RootNavigator useEffect)
 
 Mapper: `src/lib/mapDelivery.ts` (`DeliveryResource` → `DeliveryViewModel`)
 
-Campos API: `reference_code`, `recipient`, `delivery_address`, `package_count`, `weight_kg`, status FSM (`pending` → `assigned` → `picked_up` → `in_transit` → `delivered`|`failed`).
+Campos API: `reference_code`, `recipient`, `delivery_address`, `package_count`, `weight_kg`, `proof_requirements`, status FSM (`pending` → `assigned` → `picked_up` → `in_transit` → `delivered`|`failed`).
 
 ## Outbox offline (comprovante + ações)
 

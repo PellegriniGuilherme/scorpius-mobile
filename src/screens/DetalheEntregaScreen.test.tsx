@@ -5,9 +5,9 @@
  *  - render com deliveryId param → dados da entrega mock
  *  - endereço/cliente/itens visíveis
  *  - tap "Abrir mapa" → navega para MapaRota
- *  - tap "Coletar comprovante" → navega para Comprovante
+ *  - tap "Finalizar entrega" → navega para Comprovante
  *  - estado "entrega não encontrada" (id inválido)
- *  - botão "Coletar comprovante" some quando status = 'delivered'
+ *  - botão "Finalizar entrega" some quando status = 'delivered'
  */
 import { renderWithTheme, fireEvent, screen, waitFor } from '@/../jest.test-utils';
 import { DetalheEntregaScreen } from './DetalheEntregaScreen';
@@ -69,18 +69,34 @@ describe('DetalheEntregaScreen', () => {
     expect(mockNavigate).toHaveBeenCalledWith('MapaRota', { deliveryId: 1001 });
   });
 
-  it('navigates to Comprovante when "Coletar comprovante" is pressed', async () => {
+  it('navigates to Comprovante when "Finalizar entrega" is pressed', async () => {
     setRouteParams({ deliveryId: 1002 });
     renderWithTheme(<DetalheEntregaScreen />);
-    fireEvent.press(await screen.findByText('Coletar comprovante'));
+    fireEvent.press(await screen.findByText('Finalizar entrega'));
     expect(mockNavigate).toHaveBeenCalledWith('Comprovante', { deliveryId: 1002 });
   });
 
-  it('hides "Coletar comprovante" button when status is delivered', async () => {
+  it('navigates to MarcarFalha when fail choice card is pressed', async () => {
+    setRouteParams({ deliveryId: 1002 });
+    renderWithTheme(<DetalheEntregaScreen />);
+    await screen.findByText('Algo deu errado?');
+    fireEvent.press(screen.getByTestId('detail-fail-choice'));
+    expect(mockNavigate).toHaveBeenCalledWith('MarcarFalha', { deliveryId: 1002 });
+  });
+
+  it('navigates to ReportarOcorrencia when occurrence choice card is pressed', async () => {
+    setRouteParams({ deliveryId: 1002 });
+    renderWithTheme(<DetalheEntregaScreen />);
+    await screen.findByText('Algo deu errado?');
+    fireEvent.press(screen.getByTestId('detail-occurrence-choice'));
+    expect(mockNavigate).toHaveBeenCalledWith('ReportarOcorrencia', { deliveryId: 1002 });
+  });
+
+  it('hides "Finalizar entrega" button when status is delivered', async () => {
     setRouteParams({ deliveryId: 1003 });
     renderWithTheme(<DetalheEntregaScreen />);
     await screen.findByText('Hospital Norte');
-    expect(screen.queryByText('Coletar comprovante')).toBeNull();
+    expect(screen.queryByText('Finalizar entrega')).toBeNull();
     expect(screen.getByText('Abrir mapa')).toBeTruthy();
   });
 });

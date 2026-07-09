@@ -61,8 +61,11 @@ function jitteredBackoff(baseSeconds: number): number {
 
 export interface ProofUploadPayload {
   deliveryId: number;
-  photoPath: string;
-  signatureName: string;
+  photoPath?: string;
+  signaturePath?: string;
+  signatureName?: string;
+  requiresPhoto?: boolean;
+  requiresSignature?: boolean;
 }
 
 export interface DeliveryActionOutboxPayload {
@@ -74,6 +77,7 @@ export interface DeliveryActionOutboxPayload {
 
 export interface OccurrenceOutboxPayload {
   batchId: string;
+  photoPath?: string;
   occurrence: {
     local_id: string;
     delivery_id: number;
@@ -81,6 +85,7 @@ export interface OccurrenceOutboxPayload {
     status: 'open';
     notes?: string;
     occurred_at: string;
+    photo_paths?: string[];
   };
 }
 

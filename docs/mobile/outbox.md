@@ -81,8 +81,12 @@ interface ApiClient {
 Implementação real (`src/api/boot.ts`):
 1. `POST /api/v1/driver/deliveries/{id}/upload-url` — `{ document_type, content_type }` → presigned URL
 2. `PUT <presigned_url>` — binary JPEG
-3. `POST /api/v1/driver/deliveries/{id}/proof` — `{ photo_url, signature_url? }`
-4. `POST /api/v1/driver/deliveries/{id}/complete` — `{ notes? }`
+3. `POST /api/v1/driver/deliveries/{id}/proof` — `{ photo_url?, signature_url? }` (obrigatórios conforme `proof_requirements` da entrega)
+4. `POST /api/v1/driver/deliveries/{id}/complete` — `{ photo_url?, signature_url?, notes? }`
+
+**Requisitos de comprovante:** `GET /driver/deliveries/{id}` retorna `proof_requirements: { requires_photo, requires_signature }`
+(definidos pelo Hub/ERP em `POST/PATCH /deliveries`). O `ComprovanteScreen` exibe e valida
+dinamicamente; `boot.ts` só faz upload dos arquivos capturados.
 
 Outbox types adicionais:
 - `delivery_action` — replay FSM (`start`, `pickup`, `in-transit`, `fail`, `complete`)
@@ -91,8 +95,9 @@ Outbox types adicionais:
 ### ComprovanteScreen (`src/screens/ComprovanteScreen.tsx`)
 
 Refactor (T068.5):
-- Tap "Capturar foto" → `ImagePicker.launchCameraAsync` → copia para `Paths.cache` local
+- Tap "Capturar foto" → `ImagePicker.launchCameraAsync` → copia para `Paths.cache` local (se `requires_photo`)
 - Tap "Confirmar entrega" → `outbox.enqueue('proof_upload', payload)` + `syncWorker.tick()`
+- UI condicional: seções de foto/assinatura só quando `delivery.proofRequirements` exige
 - UI mostra 3 estados: pending (sincronizando spinner) | failed (badge danger + "Reenviar") | success (✓ + "Voltando para a lista")
 - Split em `ComprovanteScreen` (early return) + `ComprovanteScreenInner` (delivery narrowed para `NonNullable<...>`)
 
@@ -144,10 +149,15 @@ PUT <url>
   Response 200: ok
 
 POST /api/v1/driver/deliveries/{id}/proof
-  Request: { photo_url, signature_url? }
+  Request: { photo_url?, signature_url? }
+  422 se proof_requirements exige campo ausente
 
 POST /api/v1/driver/deliveries/{id}/complete
   Request: { photo_url?, signature_url?, notes? }
+  422 se proof_requirements exige comprovante ausente (body ou metadata de /proof)
+
+GET /api/v1/driver/deliveries/{id}
+  Response: { data: { ..., proof_requirements: { requires_photo, requires_signature } } }
 ```
 
 Frontend enfileira `uploadProof({ deliveryId, photoPath, signatureName })` no outbox; `boot.ts` executa a sequência acima.

@@ -15,6 +15,7 @@ export interface SyncOccurrencePayload {
   status: 'open';
   notes?: string;
   occurred_at: string;
+  photo_paths?: string[];
 }
 
 export async function ingestEvents(batchId: string, events: SyncEventPayload[]): Promise<void> {

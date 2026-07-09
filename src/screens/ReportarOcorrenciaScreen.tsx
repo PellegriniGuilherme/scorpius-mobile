@@ -1,14 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Text, View, ActivityIndicator } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Input } from '@/components/Input';
+import { Select } from '@/components/Select';
 import { KeyboardFormScreen } from '@/components/KeyboardFormScreen';
-import { listDriverOccurrenceTypes, type DriverOccurrenceType } from '@/api/occurrenceTypes';
+import type { DriverOccurrenceType } from '@/api/occurrenceTypes';
+import { fetchOccurrenceTypesWithCache } from '@/services/occurrenceTypeService';
 import { outbox } from '@/services/OutboxService';
 import { syncWorker } from '@/services/SyncWorker';
+import { generateUuid } from '@/lib/uuid';
 import { useTheme } from '@/theme/ThemeProvider';
+import { ptBR } from '@/i18n/pt-BR';
 import type { AppStackParamList } from '@/navigation/types';
 
 type Route_ = RouteProp<AppStackParamList, 'ReportarOcorrencia'>;
@@ -20,30 +26,81 @@ export function ReportarOcorrenciaScreen() {
   const [types, setTypes] = useState<DriverOccurrenceType[]>([]);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
+  const [photoPath, setPhotoPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [capturing, setCapturing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const [fromCache, setFromCache] = useState(false);
+
+  const selectedType = useMemo(
+    () => types.find((t) => t.slug === selectedSlug) ?? null,
+    [types, selectedSlug],
+  );
+  const requiresPhoto = selectedType?.requires_photo ?? false;
+  const hasPhoto = !!photoPath;
+  const canSubmit = !!selectedSlug && (!requiresPhoto || hasPhoto);
 
   useEffect(() => {
     void (async () => {
       try {
-        const data = await listDriverOccurrenceTypes(true);
+        const { data, fromCache: cached } = await fetchOccurrenceTypesWithCache(true);
         setTypes(data);
+        setFromCache(cached);
         setSelectedSlug(data[0]?.slug ?? null);
+        if (data.length === 0) setLoadError(true);
+      } catch {
+        setLoadError(true);
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
+  useEffect(() => {
+    if (!requiresPhoto) {
+      setPhotoPath(null);
+    }
+  }, [requiresPhoto]);
+
+  async function handleCapturePhoto() {
+    if (capturing) return;
+    const deliveryId = route.params.deliveryId;
+    setCapturing(true);
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const src = result.assets[0].uri;
+      const photosDir = new FileSystem.Directory(FileSystem.Paths.cache, 'occurrences');
+      try {
+        await photosDir.create({ intermediates: true });
+      } catch {
+        // diretório já existe
+      }
+      const srcFile = new FileSystem.File(src);
+      const dstFile = new FileSystem.File(photosDir, `${deliveryId}-${Date.now()}.jpg`);
+      await srcFile.copy(dstFile);
+      setPhotoPath(dstFile.uri);
+    } finally {
+      setCapturing(false);
+    }
+  }
+
   async function handleSubmit() {
-    if (!selectedSlug) return;
+    if (!canSubmit || !selectedSlug) return;
     setSubmitting(true);
     try {
-      const batchId = crypto.randomUUID();
-      const localId = crypto.randomUUID();
+      const batchId = generateUuid();
+      const localId = generateUuid();
       const occurredAt = new Date().toISOString();
       await outbox.enqueue('occurrence_report', {
         batchId,
+        photoPath: requiresPhoto ? photoPath ?? undefined : undefined,
         occurrence: {
           local_id: localId,
           delivery_id: route.params.deliveryId,
@@ -68,43 +125,131 @@ export function ReportarOcorrenciaScreen() {
     );
   }
 
+  if (loadError || types.length === 0) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, padding: tokens.space[6], justifyContent: 'center' }}>
+        <Text style={{ color: colors.textMuted, textAlign: 'center' }}>
+          {loadError ? ptBR.occurrence.loadError : ptBR.occurrence.emptyTypes}
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <KeyboardFormScreen
       contentContainerStyle={{ gap: tokens.space[4] }}
       footer={
         <Button
-          label="Enviar"
+          label={ptBR.occurrence.submit}
           onPress={() => void handleSubmit()}
           loading={submitting}
-          disabled={!selectedSlug}
+          disabled={!canSubmit}
           fullWidth
         />
       }
     >
       <Text style={{ fontSize: tokens.text['2xl'], fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
-        Reportar ocorrência
+        {ptBR.occurrence.title}
       </Text>
+      <Card
+        style={{
+          backgroundColor: colors.statusInfoSurface,
+          borderColor: colors.statusInfoBorder,
+        }}
+      >
+        <Text
+          style={{
+            fontSize: tokens.text.sm,
+            fontWeight: tokens.weight.semibold,
+            color: colors.statusInfoText,
+          }}
+        >
+          {ptBR.occurrence.infoBannerTitle}
+        </Text>
+        <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm, marginTop: tokens.space[2], lineHeight: 20 }}>
+          {ptBR.occurrence.infoBannerBody}
+        </Text>
+      </Card>
+      {fromCache && (
+        <Text style={{ color: colors.statusWarningText, fontSize: tokens.text.xs }}>
+          {ptBR.occurrence.offlineTypes}
+        </Text>
+      )}
 
       <Card>
-        <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs, marginBottom: tokens.space[2] }}>TIPO</Text>
-        {types.map((t) => (
-          <Button
-            key={t.id}
-            label={t.name}
-            variant={selectedSlug === t.slug ? 'primary' : 'secondary'}
-            onPress={() => setSelectedSlug(t.slug)}
-            fullWidth
-          />
-        ))}
+        <Select
+          label={ptBR.occurrence.typeLabel}
+          value={selectedSlug}
+          options={types.map((t) => ({ value: t.slug, label: t.name }))}
+          onChange={setSelectedSlug}
+          placeholder={ptBR.occurrence.typePlaceholder}
+          testID="occurrence-type"
+        />
       </Card>
+
+      {requiresPhoto && (
+        <Card>
+          <Text
+            style={{
+              fontSize: tokens.text.xs,
+              color: colors.textMuted,
+              fontWeight: tokens.weight.medium,
+              textTransform: 'uppercase',
+            }}
+          >
+            {ptBR.occurrence.photoLabel}
+          </Text>
+          <View
+            style={{
+              marginTop: tokens.space[3],
+              height: 180,
+              backgroundColor: hasPhoto ? colors.statusSuccessSurface : colors.surfaceInset,
+              borderColor: hasPhoto ? colors.statusSuccessBorder : colors.borderDefault,
+              borderWidth: 2,
+              borderRadius: tokens.radius.md,
+              borderStyle: hasPhoto ? 'solid' : 'dashed',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: tokens.space[2],
+            }}
+          >
+            {hasPhoto ? (
+              <>
+                <Text style={{ fontSize: 48, color: colors.statusSuccessMarker }}>📷</Text>
+                <Text style={{ color: colors.statusSuccessText, fontWeight: tokens.weight.semibold }}>
+                  {ptBR.occurrence.photoCaptured}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={{ fontSize: 48, color: colors.textSubtle }}>📷</Text>
+                <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm }}>
+                  {ptBR.occurrence.photoRequired}
+                </Text>
+              </>
+            )}
+          </View>
+          <View style={{ marginTop: tokens.space[3] }}>
+            <Button
+              label={hasPhoto ? ptBR.occurrence.retakePhoto : capturing ? ptBR.occurrence.openingCamera : ptBR.occurrence.capturePhoto}
+              variant={hasPhoto ? 'ghost' : 'secondary'}
+              onPress={handleCapturePhoto}
+              loading={capturing}
+              disabled={capturing}
+              fullWidth
+              testID="occurrence-capture-photo"
+            />
+          </View>
+        </Card>
+      )}
 
       <Card>
         <Input
-          label="DESCRIÇÃO"
+          label={ptBR.occurrence.descriptionLabel}
           value={notes}
           onChangeText={setNotes}
           multiline
-          placeholder="Descreva o que aconteceu"
+          placeholder={ptBR.occurrence.descriptionPlaceholder}
         />
       </Card>
     </KeyboardFormScreen>

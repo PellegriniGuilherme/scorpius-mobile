@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { SECURE_STORE_TIMEOUT_MS, withTimeout } from '@/lib/secureStoreTimeout';
 
-const DEVICE_ID_KEY = 'scorpius:move:device_id';
+const DEVICE_ID_KEY = 'scorpius.move.device_id';
 
 let memoryDeviceId: string | null = null;
 let hydrationStarted = false;

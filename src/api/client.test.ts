@@ -51,18 +51,18 @@ describe('api/client (T104)', () => {
   describe('loadAccessToken / setAccessToken / getAccessTokenSync', () => {
     it('loadAccessToken reads from SecureStore on first call', async () => {
       (SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) => {
-        if (key === 'scorpius:move:driver_token') return Promise.resolve('token-from-store');
+        if (key === 'scorpius.move.driver_token') return Promise.resolve('token-from-store');
         return Promise.resolve(null);
       });
       startTokenHydration();
       const token = await loadAccessToken();
       expect(token).toBe('token-from-store');
-      expect(SecureStore.getItemAsync).toHaveBeenCalledWith('scorpius:move:driver_token');
+      expect(SecureStore.getItemAsync).toHaveBeenCalledWith('scorpius.move.driver_token');
     });
 
     it('loadAccessToken returns cached token on subsequent calls (no SecureStore read)', async () => {
       (SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) => {
-        if (key === 'scorpius:move:driver_token') return Promise.resolve('cached-token');
+        if (key === 'scorpius.move.driver_token') return Promise.resolve('cached-token');
         return Promise.resolve(null);
       });
       startTokenHydration();
@@ -161,7 +161,7 @@ describe('api/client (T104)', () => {
 
       await expect(responseErrorCallback(error401)).rejects.toEqual(error401);
       // setAccessToken(null) is called, which internally does deleteItemAsync
-      expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('scorpius:move:driver_token');
+      expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('scorpius.move.driver_token');
       expect(sessionExpired).toHaveBeenCalled();
       expect(getAccessTokenSync()).toBeNull();
     });

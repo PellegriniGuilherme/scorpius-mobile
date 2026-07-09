@@ -14,20 +14,22 @@
  * canceled=true (não há câmera real no web). O placeholder visual
  * "Aguardando captura" continua aparecendo.
  */
-import { useState, useEffect, useCallback } from 'react';
-import { Text, View, ActivityIndicator, Modal, Pressable, ScrollView } from 'react-native';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Text, View, ActivityIndicator, Modal, Pressable, ScrollView, Image } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Input } from '@/components/Input';
+import { SignaturePad, type SignaturePadRef } from '@/components/SignaturePad';
 import { KeyboardFormScreen } from '@/components/KeyboardFormScreen';
 import { fetchDeliveryWithCache } from '@/services/deliveryService';
 import { mapDelivery } from '@/lib/mapDelivery';
 import type { DeliveryViewModel } from '@/types/delivery';
 import { outbox, type OutboxItem } from '@/services/OutboxService';
 import { syncWorker } from '@/services/SyncWorker';
+import { applyOptimisticAction } from '@/services/deliveryMutationService';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
 import type { AppStackParamList } from '@/navigation/types';
@@ -70,7 +72,9 @@ export function ComprovanteScreen() {
 
 function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
   const { colors, tokens } = useTheme();
+  const signaturePadRef = useRef<SignaturePadRef>(null);
   const [photoPath, setPhotoPath] = useState<string | null>(null);
+  const [hasSignature, setHasSignature] = useState(false);
   const [signatureName, setSignatureName] = useState('');
   const [outboxId, setOutboxId] = useState<number | null>(null);
   const [syncStatus, setSyncStatus] = useState<OutboxSyncStatus>('idle');
@@ -109,8 +113,31 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
     setDlqItems(items);
   }
 
+  const requiresPhoto = delivery.proofRequirements.requires_photo;
+  const requiresSignature = delivery.proofRequirements.requires_signature;
+  const showPhotoSection = requiresPhoto;
+  const showSignatureSection = requiresSignature;
+
   const hasPhoto = !!photoPath;
-  const canSubmit = hasPhoto && signatureName.trim().length >= 3;
+  const canSubmit =
+    (!requiresPhoto || hasPhoto) &&
+    (!requiresSignature || (hasSignature && signatureName.trim().length >= 3));
+
+  async function persistSignatureImage(): Promise<string> {
+    const capturedUri = await signaturePadRef.current?.captureToCacheFile(`sig-${delivery.id}`);
+    if (!capturedUri) throw new Error('signature_capture_failed');
+
+    const proofsDir = new FileSystem.Directory(FileSystem.Paths.cache, 'proofs');
+    try {
+      await proofsDir.create({ intermediates: true });
+    } catch {
+      // diretório já existe
+    }
+    const srcFile = new FileSystem.File(capturedUri);
+    const dstFile = new FileSystem.File(proofsDir, `${delivery.id}-sig-${Date.now()}.png`);
+    await srcFile.copy(dstFile);
+    return dstFile.uri;
+  }
 
   async function handleCapturePhoto() {
     if (capturing) return;
@@ -145,12 +172,20 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
   }
 
   async function handleSubmit() {
-    if (!canSubmit || !photoPath) return;
+    if (!canSubmit) return;
+    let signaturePath: string | undefined;
+    if (requiresSignature && hasSignature) {
+      signaturePath = await persistSignatureImage();
+    }
     const id = await outbox.enqueue('proof_upload', {
       deliveryId: delivery.id,
-      photoPath,
-      signatureName: signatureName.trim(),
+      ...(photoPath ? { photoPath } : {}),
+      ...(signaturePath ? { signaturePath } : {}),
+      ...(signatureName.trim() ? { signatureName: signatureName.trim() } : {}),
+      requiresPhoto,
+      requiresSignature,
     });
+    await applyOptimisticAction({ deliveryId: delivery.id, action: 'complete' });
     setOutboxId(id);
     setSyncStatus('pending');
     setSubmitted(true);
@@ -266,34 +301,48 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
           </Pressable>
         )}
 
+        {!showPhotoSection && !showSignatureSection && (
+          <Card>
+            <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm, lineHeight: 20 }}>
+              {ptBR.proof.noProofRequired}
+            </Text>
+          </Card>
+        )}
+
+        {showPhotoSection && (
         <Card>
           <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, fontWeight: tokens.weight.medium, textTransform: 'uppercase' }}>
-            {ptBR.proof.photoLabel}
+            {ptBR.proof.photoLabel} {ptBR.proof.requiredSuffix}
           </Text>
           <View
             style={{
               marginTop: tokens.space[3],
-              height: 180,
-              backgroundColor: hasPhoto ? colors.statusSuccessSurface : colors.surfaceInset,
+              height: 220,
+              backgroundColor: colors.surfaceInset,
               borderColor: hasPhoto ? colors.statusSuccessBorder : colors.borderDefault,
               borderWidth: 2,
               borderRadius: tokens.radius.md,
               borderStyle: hasPhoto ? 'solid' : 'dashed',
+              overflow: 'hidden',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: tokens.space[2],
             }}
           >
-            {hasPhoto ? (
-              <>
-                <Text style={{ fontSize: 48, color: colors.statusSuccessMarker }}>📷</Text>
-                <Text style={{ color: colors.statusSuccessText, fontWeight: tokens.weight.semibold }}>Foto capturada</Text>
-              </>
+            {hasPhoto && photoPath ? (
+              <Image
+                testID="proof-photo-preview"
+                source={{ uri: photoPath }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="cover"
+                accessibilityLabel="Pré-visualização da foto do pacote"
+              />
             ) : (
-              <>
+              <View style={{ alignItems: 'center', gap: tokens.space[2], padding: tokens.space[4] }}>
                 <Text style={{ fontSize: 48, color: colors.textSubtle }}>📷</Text>
-                <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm }}>Aguardando captura</Text>
-              </>
+                <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm, textAlign: 'center' }}>
+                  {ptBR.proof.waitingPhoto}
+                </Text>
+              </View>
             )}
           </View>
           <View style={{ marginTop: tokens.space[3] }}>
@@ -307,36 +356,42 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
             />
           </View>
         </Card>
+        )}
 
+        {showSignatureSection && (
         <Card>
-          <View style={{ gap: tokens.space[2] }}>
-            <View
-              style={{
-                height: 80,
-                backgroundColor: colors.surfaceInset,
-                borderColor: colors.borderDefault,
-                borderWidth: 1,
-                borderRadius: tokens.radius.md,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text style={{ fontFamily: tokens.font.mono, fontStyle: 'italic', fontSize: tokens.text['2xl'], color: signatureName ? colors.textPrimary : colors.textSubtle }}>
-                {signatureName || '— área de assinatura —'}
-              </Text>
-            </View>
+          <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, fontWeight: tokens.weight.medium, textTransform: 'uppercase' }}>
+            {ptBR.proof.signatureAreaLabel} {ptBR.proof.requiredSuffix}
+          </Text>
+          <View style={{ gap: tokens.space[2], marginTop: tokens.space[3] }}>
+            <SignaturePad
+              ref={signaturePadRef}
+              testID="proof-signature-pad"
+              onChange={setHasSignature}
+            />
+            <Button
+              label={ptBR.proof.clearSignature}
+              variant="ghost"
+              onPress={() => signaturePadRef.current?.clear()}
+              disabled={!hasSignature}
+              fullWidth
+            />
             <Input
               label={ptBR.proof.signatureLabel}
-              placeholder="Nome do destinatário"
+              hint={ptBR.proof.signatureAreaHint}
+              placeholder="Ex.: Maria Santos"
               value={signatureName}
               onChangeText={setSignatureName}
             />
           </View>
         </Card>
+        )}
 
+        {(showPhotoSection || showSignatureSection) && (
         <Card>
           <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs, lineHeight: 18 }}>{ptBR.proof.placeholder}</Text>
         </Card>
+        )}
       </KeyboardFormScreen>
 
       <Modal

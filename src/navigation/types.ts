@@ -14,5 +14,6 @@ export type AppStackParamList = {
   MapaRota: { deliveryId: number };
   Comprovante: { deliveryId: number };
   ReportarOcorrencia: { deliveryId: number };
+  MarcarFalha: { deliveryId: number };
   PerfilMotorista: undefined;
 };
