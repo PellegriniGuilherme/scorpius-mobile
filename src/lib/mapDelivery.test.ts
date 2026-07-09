@@ -1,0 +1,37 @@
+import { mapDelivery } from '@/lib/mapDelivery';
+import { MOCK_DELIVERY_API } from '@/testFixtures/deliveryApi';
+import type { DeliveryApi } from '@/types/delivery';
+
+describe('mapDelivery', () => {
+  it('maps delivery window from API fields', () => {
+    const mapped = mapDelivery(MOCK_DELIVERY_API[0]!);
+    expect(mapped.windowStart).toBe('2026-06-21T08:00:00-03:00');
+    expect(mapped.windowEnd).toBe('2026-06-21T12:00:00-03:00');
+  });
+
+  it('returns null window when API has no schedule', () => {
+    const api: DeliveryApi = {
+      ...MOCK_DELIVERY_API[0]!,
+      delivery_window_start: null,
+      delivery_window_end: null,
+      delivery_scheduled_at: null,
+    };
+    const mapped = mapDelivery(api);
+    expect(mapped.windowStart).toBeNull();
+    expect(mapped.windowEnd).toBeNull();
+  });
+
+  it('does not derive window from created_at or delivered_at', () => {
+    const api: DeliveryApi = {
+      ...MOCK_DELIVERY_API[0]!,
+      delivery_window_start: null,
+      delivery_window_end: null,
+      delivery_scheduled_at: null,
+      delivered_at: '2026-06-21T15:00:00-03:00',
+      created_at: '2026-06-21T07:00:00-03:00',
+    };
+    const mapped = mapDelivery(api);
+    expect(mapped.windowStart).toBeNull();
+    expect(mapped.windowEnd).toBeNull();
+  });
+});

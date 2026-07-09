@@ -42,6 +42,8 @@ export interface DeliveryApi {
   status: DeliveryApiStatus;
   delivery_address: DeliveryAddress | null;
   delivery_scheduled_at: string | null;
+  delivery_window_start: string | null;
+  delivery_window_end: string | null;
   delivered_at: string | null;
   recipient: { name: string | null; phone: string | null };
   package_count: number;
@@ -71,8 +73,8 @@ export interface DeliveryViewModel {
   };
   packageCount: number;
   weightKg: number | null;
-  windowStart: string;
-  windowEnd: string;
+  windowStart: string | null;
+  windowEnd: string | null;
   notes: string | null;
   failureReason: string | null;
   proofRequirements: ProofRequirements;

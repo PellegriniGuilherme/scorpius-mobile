@@ -9,6 +9,7 @@ import { ActionChoiceCard } from '@/components/ActionChoiceCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import NetInfo from '@react-native-community/netinfo';
 import { fetchDeliveryWithCache } from '@/services/deliveryService';
+import { formatDeliveryWindowLabel, deliveryWindowEmptyLabel } from '@/lib/formatDeliveryWindow';
 import { mapDelivery, nextFsmAction } from '@/lib/mapDelivery';
 import { runDeliveryAction } from '@/services/deliveryActions';
 import type { DeliveryViewModel } from '@/types/delivery';
@@ -108,8 +109,7 @@ export function DetalheEntregaScreen() {
     );
   }
 
-  const wStart = new Date(delivery.windowStart).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  const wEnd = new Date(delivery.windowEnd).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const windowLabel = formatDeliveryWindowLabel(delivery.windowStart, delivery.windowEnd);
   const fsmAction = nextFsmAction(delivery.status);
   const proofPhoto = delivery.proofRequirements.requires_photo;
   const proofSignature = delivery.proofRequirements.requires_signature;
@@ -181,7 +181,7 @@ export function DetalheEntregaScreen() {
           {ptBR.detail.windowSection}
         </Text>
         <Text style={{ fontSize: tokens.text.lg, fontWeight: tokens.weight.semibold, color: colors.accent, marginTop: tokens.space[1] }}>
-          {wStart}–{wEnd}
+          {windowLabel ?? deliveryWindowEmptyLabel()}
         </Text>
       </Card>
 

@@ -77,6 +77,7 @@ export const ptBR = {
     addressSection: 'Endereço',
     itemsSection: 'Itens ({count})',
     windowSection: 'Janela de entrega',
+    windowEmpty: 'Sem janela definida',
     openMap: 'Abrir mapa',
     collectProof: 'Finalizar entrega',
     finalizeHint: 'Ao finalizar, a entrega será encerrada como Entregue no sistema.',

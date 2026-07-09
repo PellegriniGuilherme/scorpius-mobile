@@ -17,6 +17,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { fetchDeliveriesWithCache, readDeliveriesFromCache } from '@/services/deliveryService';
 import { subscribeDeliveryCache } from '@/services/deliveryCacheEvents';
 import { refreshOccurrenceTypesCache } from '@/services/occurrenceTypeService';
+import { formatDeliveryWindowLabel, deliveryWindowEmptyLabel } from '@/lib/formatDeliveryWindow';
 import { createAllUiStatusSet, mapDelivery, matchesUiFilters } from '@/lib/mapDelivery';
 import { useAuthStore } from '@/store/auth';
 import type { DeliveryViewModel } from '@/types/delivery';
@@ -163,8 +164,7 @@ export function HomeMotoristaScreen() {
   }
 
   function renderItem({ item }: { item: DeliveryViewModel }) {
-    const wStart = new Date(item.windowStart).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    const wEnd = new Date(item.windowEnd).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const windowLabel = formatDeliveryWindowLabel(item.windowStart, item.windowEnd);
     return (
       <Pressable
         onPress={() => navigation.navigate('DetalheEntrega', { deliveryId: item.id })}
@@ -190,7 +190,7 @@ export function HomeMotoristaScreen() {
             </Text>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ color: colors.accent, fontSize: tokens.text.sm, fontWeight: tokens.weight.semibold }}>
-                {wStart}–{wEnd}
+                {windowLabel ?? deliveryWindowEmptyLabel()}
               </Text>
               <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs }}>
                 {item.packageCount} pkg{item.packageCount !== 1 ? 's' : ''}

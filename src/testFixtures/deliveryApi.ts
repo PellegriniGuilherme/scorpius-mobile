@@ -17,6 +17,8 @@ export function mockDeliveryToApi(m: (typeof MOCK_DELIVERIES)[number]): Delivery
     status: STATUS_MAP[m.status] ?? 'assigned',
     delivery_address: { ...m.address },
     delivery_scheduled_at: m.scheduled_for,
+    delivery_window_start: m.window_start,
+    delivery_window_end: m.window_end,
     delivered_at: m.status === 'delivered' ? m.window_end : null,
     recipient: { name: m.customer.name, phone: m.customer.phone },
     package_count: m.items.reduce((sum, item) => sum + item.quantity, 0),

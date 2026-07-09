@@ -17,6 +17,12 @@ Este CHANGELOG é parte do monorepo Scorpius. O índice agregado vive em
 
 ## [Unreleased]
 
+### Changed
+
+- **Janela de entrega** — `mapDelivery` consome `delivery_window_start` /
+  `delivery_window_end` da API (sem fallback em `created_at` / `delivered_at`).
+  Lista e detalhe exibem intervalo real ou "Sem janela definida".
+
 ### Added
 - Em desenvolvimento (pós-MVP close 2026-06-24 — recursos V1).
 

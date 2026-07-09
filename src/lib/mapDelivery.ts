@@ -36,8 +36,6 @@ function readCoords(addr: DeliveryAddress | null): { lat: number; lng: number } 
 export function mapDelivery(api: DeliveryApi): DeliveryViewModel {
   const addr = api.delivery_address ?? {};
   const { lat, lng } = readCoords(addr);
-  const scheduled = api.delivery_scheduled_at ?? api.created_at;
-  const end = api.delivered_at ?? scheduled;
 
   return {
     id: api.id,
@@ -60,8 +58,8 @@ export function mapDelivery(api: DeliveryApi): DeliveryViewModel {
     },
     packageCount: api.package_count,
     weightKg: api.weight_kg,
-    windowStart: scheduled,
-    windowEnd: end,
+    windowStart: api.delivery_window_start,
+    windowEnd: api.delivery_window_end,
     notes: api.notes,
     failureReason: api.failure?.reason ?? null,
     proofRequirements: api.proof_requirements ?? DEFAULT_PROOF_REQUIREMENTS,
