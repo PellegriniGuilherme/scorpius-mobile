@@ -26,7 +26,7 @@ import { useRoute as _useRoute } from '@react-navigation/native';
 const mockUseRoute = _useRoute as jest.Mock;
 
 jest.mock('@/lib/deviceId', () => ({
-  getDeviceId: jest.fn().mockResolvedValue('test-device-id'),
+  getDeviceId: jest.fn().mockReturnValue('test-device-id'),
 }));
 
 // Mock api/auth (usado pelo handleSubmit)
@@ -133,7 +133,7 @@ describe('OtpScreen countdown (T101)', () => {
     expect(() => jest.advanceTimersByTime(2000)).not.toThrow();
   });
 
-  it('aceita código de 6 dígitos e submete (com confirmOtp mock)', async () => {
+  it('aceita código de 6 dígitos e submete automaticamente (com confirmOtp mock)', async () => {
     (authApi.confirmOtp as jest.Mock).mockResolvedValueOnce({
       access_token: 'mock-token',
       token_type: 'Bearer',
@@ -142,7 +142,6 @@ describe('OtpScreen countdown (T101)', () => {
     setRouteParams({ phone: '+5511999998888' });
     renderWithTheme(<OtpScreen />);
     fireEvent.changeText(screen.getByLabelText('Código de 6 dígitos'), '123456');
-    fireEvent.press(screen.getByText('Confirmar'));
     await waitFor(() => {
       expect(authApi.confirmOtp).toHaveBeenCalledWith('+5511999998888', '123456', 'test-device-id');
     });
