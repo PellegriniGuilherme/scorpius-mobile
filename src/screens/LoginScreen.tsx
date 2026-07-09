@@ -11,7 +11,7 @@
  *  3. OtpScreen confirma código via `POST /driver/auth/confirm`
  */
 import axios from 'axios';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -31,9 +31,6 @@ function isHttpStatus(error: unknown, status: number): boolean {
   if (axios.isAxiosError(error)) {
     return error.response?.status === status;
   }
-  if (typeof error === 'object' && error !== null && 'response' in error) {
-    return (error as { response?: { status?: number } }).response?.status === status;
-  }
   return false;
 }
 
@@ -45,17 +42,11 @@ export function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const submittingRef = useRef(false);
 
-  useEffect(() => {
-    submittingRef.current = false;
-    setSubmitting(false);
-  }, []);
+  const handleSubmit = useCallback(async () => {
+    if (submittingRef.current) return;
 
-  const trimmed = phone.replace(/\D/g, '');
-  const isValid = validateWhatsappInput(phone);
-
-  async function handleSubmit() {
-    if (!isValid || submittingRef.current) {
-      if (!isValid) setError(ptBR.login.errorInvalidPhone);
+    if (!validateWhatsappInput(phone)) {
+      setError(ptBR.login.errorInvalidPhone);
       return;
     }
 
@@ -64,6 +55,7 @@ export function LoginScreen() {
     setSubmitting(true);
 
     try {
+      const trimmed = phone.replace(/\D/g, '');
       const formattedPhone = `+${trimmed}`;
       const deviceId = getDeviceId();
       const check = await checkPhone(formattedPhone);
@@ -88,7 +80,7 @@ export function LoginScreen() {
       submittingRef.current = false;
       setSubmitting(false);
     }
-  }
+  }, [navigation, phone]);
 
   return (
     <KeyboardFormScreen
@@ -97,9 +89,10 @@ export function LoginScreen() {
         <Button
           testID="login-submit-button"
           label={submitting ? ptBR.login.submitting : ptBR.login.submit}
-          onPress={handleSubmit}
+          onPress={() => {
+            void handleSubmit();
+          }}
           loading={submitting}
-          disabled={submitting}
           fullWidth
         />
       }

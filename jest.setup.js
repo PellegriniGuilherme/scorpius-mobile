@@ -48,6 +48,7 @@ jest.mock('@react-navigation/native', () => {
       key: 'test-route',
       name: 'Test',
     }),
+    useFocusEffect: jest.fn(),
     NavigationContainer: ({ children }) => children,
   };
 });

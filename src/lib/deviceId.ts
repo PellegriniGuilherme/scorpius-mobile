@@ -6,6 +6,15 @@ const DEVICE_ID_KEY = 'scorpius:move:device_id';
 let memoryDeviceId: string | null = null;
 let hydrationStarted = false;
 
+/** UUID v4 sem depender de `crypto.randomUUID()` (pode travar no Hermes/Android). */
+function generateUuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = (Math.random() * 16) | 0;
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
 function persistDeviceId(id: string): void {
   void withTimeout(
     SecureStore.setItemAsync(DEVICE_ID_KEY, id),
@@ -45,7 +54,7 @@ export function startDeviceIdHydration(): void {
 export function getDeviceId(): string {
   if (memoryDeviceId) return memoryDeviceId;
 
-  const id = crypto.randomUUID();
+  const id = generateUuid();
   memoryDeviceId = id;
   persistDeviceId(id);
   return id;

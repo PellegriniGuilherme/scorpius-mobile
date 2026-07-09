@@ -1,7 +1,7 @@
 /**
  * Scorpius Move — Driver auth (OTP flow).
  */
-import { apiClient, loadRefreshToken, setAccessToken, setRefreshToken } from './client';
+import { apiClient, authClient, loadRefreshToken, setAccessToken, setRefreshToken } from './client';
 
 export interface OtpRequestResponse {
   message: string;
@@ -14,14 +14,14 @@ export interface CheckPhoneResponse {
 }
 
 export async function checkPhone(phone: string): Promise<CheckPhoneResponse> {
-  const { data } = await apiClient.get<CheckPhoneResponse>('/driver/check-phone', {
+  const { data } = await authClient.get<CheckPhoneResponse>('/driver/check-phone', {
     params: { phone },
   });
   return data;
 }
 
 export async function requestOtp(whatsapp: string, deviceId: string): Promise<OtpRequestResponse> {
-  const { data } = await apiClient.post<OtpRequestResponse>('/driver/auth/otp', {
+  const { data } = await authClient.post<OtpRequestResponse>('/driver/auth/otp', {
     whatsapp,
     device_id: deviceId,
   });
@@ -48,7 +48,7 @@ export async function confirmOtp(
   otp: string,
   deviceId: string,
 ): Promise<OtpConfirmResponse> {
-  const { data } = await apiClient.post<OtpConfirmResponse>('/driver/auth/otp/confirm', {
+  const { data } = await authClient.post<OtpConfirmResponse>('/driver/auth/otp/confirm', {
     whatsapp,
     otp,
     device_id: deviceId,
@@ -62,7 +62,7 @@ export async function refreshTokens(deviceId: string): Promise<boolean> {
   const refreshToken = await loadRefreshToken();
   if (!refreshToken) return false;
   try {
-    const { data } = await apiClient.post<OtpConfirmResponse>('/driver/auth/refresh', {
+    const { data } = await authClient.post<OtpConfirmResponse>('/driver/auth/refresh', {
       refresh_token: refreshToken,
       device_id: deviceId,
     });

@@ -1,34 +1,36 @@
 /**
  * Scorpius Move — API client with token refresh.
+ *
+ * authClient: rotas públicas de login (sem interceptors).
+ * apiClient: rotas autenticadas (Bearer + refresh em 401).
  */
 import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import Constants from 'expo-constants';
 import { getDeviceId } from '@/lib/deviceId';
+import { getApiBaseUrl, resolveBaseURL } from '@/api/config';
 import { SECURE_STORE_TIMEOUT_MS, withTimeout } from '@/lib/secureStoreTimeout';
 
-const DEFAULT_BASE_URL = 'http://localhost:8000/api/v1';
 const TIMEOUT_MS = 30_000;
 const SECURE_STORE_TOKEN_KEY = 'scorpius:move:driver_token';
 const SECURE_STORE_REFRESH_KEY = 'scorpius:move:driver_refresh_token';
 const TOKEN_HYDRATION_WAIT_MS = 300;
 
-const PUBLIC_AUTH_PATHS = [
-  '/driver/check-phone',
-  '/driver/auth/otp',
-  '/driver/auth/otp/confirm',
-] as const;
-
-function isPublicAuthRequest(url: string | undefined): boolean {
-  if (!url) return false;
-  return PUBLIC_AUTH_PATHS.some((path) => url.includes(path));
+function createHttpClient(): AxiosInstance {
+  return axios.create({
+    baseURL: resolveBaseURL(),
+    timeout: TIMEOUT_MS,
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+  });
 }
 
-function resolveBaseURL(): string {
-  const fromExtra = (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl;
-  if (fromExtra) return fromExtra;
-  return DEFAULT_BASE_URL;
-}
+/** Login OTP — sem interceptors (não bloqueia no SecureStore). */
+export const authClient: AxiosInstance = createHttpClient();
+
+/** API autenticada do motorista. */
+export const apiClient: AxiosInstance = createHttpClient();
 
 let cachedToken: string | null = null;
 let cachedRefreshToken: string | null = null;
@@ -40,25 +42,30 @@ let refreshInFlight: Promise<boolean> | null = null;
 export function startTokenHydration(): void {
   if (tokenHydrationPromise) return;
 
-  tokenHydrationPromise = (async () => {
-    try {
-      cachedToken = await withTimeout(
-        SecureStore.getItemAsync(SECURE_STORE_TOKEN_KEY),
-        SECURE_STORE_TIMEOUT_MS,
-        () => null,
-      );
-      cachedRefreshToken = await withTimeout(
-        SecureStore.getItemAsync(SECURE_STORE_REFRESH_KEY),
-        SECURE_STORE_TIMEOUT_MS,
-        () => null,
-      );
-    } catch {
-      cachedToken = null;
-      cachedRefreshToken = null;
-    } finally {
-      tokensHydrated = true;
-    }
-  })();
+  tokenHydrationPromise = new Promise<void>((resolve) => {
+    setTimeout(() => {
+      void (async () => {
+        try {
+          cachedToken = await withTimeout(
+            SecureStore.getItemAsync(SECURE_STORE_TOKEN_KEY),
+            SECURE_STORE_TIMEOUT_MS,
+            () => null,
+          );
+          cachedRefreshToken = await withTimeout(
+            SecureStore.getItemAsync(SECURE_STORE_REFRESH_KEY),
+            SECURE_STORE_TIMEOUT_MS,
+            () => null,
+          );
+        } catch {
+          cachedToken = null;
+          cachedRefreshToken = null;
+        } finally {
+          tokensHydrated = true;
+          resolve();
+        }
+      })();
+    }, 0);
+  });
 }
 
 export async function waitForTokenHydration(
@@ -126,9 +133,7 @@ export function getAccessTokenSync(): string | null {
   return cachedToken;
 }
 
-export function getApiBaseUrl(): string {
-  return resolveBaseURL();
-}
+export { getApiBaseUrl };
 
 /** Test-only helper */
 export function resetTokenCacheForTests(): void {
@@ -145,6 +150,20 @@ export function registerSessionExpiredHandler(fn: SessionExpiredHandler): void {
   sessionExpiredHandler = fn;
 }
 
+function setAuthHeader(config: InternalAxiosRequestConfig, token: string): void {
+  const headers = config.headers;
+  if (typeof headers.set === 'function' && typeof headers.has === 'function') {
+    if (!headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+    return;
+  }
+  const record = headers as Record<string, string | undefined>;
+  if (!record.Authorization && !record.authorization) {
+    record.Authorization = `Bearer ${token}`;
+  }
+}
+
 async function tryRefreshToken(): Promise<boolean> {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
@@ -152,15 +171,12 @@ async function tryRefreshToken(): Promise<boolean> {
     if (!refreshToken) return false;
     const deviceId = getDeviceId();
     try {
-      const { data } = await axios.post<{
+      const { data } = await authClient.post<{
         access_token: string;
         refresh_token: string;
-      }>(`${resolveBaseURL()}/driver/auth/refresh`, {
+      }>('/driver/auth/refresh', {
         refresh_token: refreshToken,
         device_id: deviceId,
-      }, {
-        headers: { Accept: 'application/json' },
-        timeout: TIMEOUT_MS,
       });
       await setAccessToken(data.access_token);
       await setRefreshToken(data.refresh_token);
@@ -174,23 +190,10 @@ async function tryRefreshToken(): Promise<boolean> {
   return refreshInFlight;
 }
 
-export const apiClient: AxiosInstance = axios.create({
-  baseURL: resolveBaseURL(),
-  timeout: TIMEOUT_MS,
-  headers: {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  },
-});
-
-apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
-  if (isPublicAuthRequest(config.url)) {
-    return config;
-  }
-
-  const token = await loadAccessToken();
-  if (token && !config.headers.has('Authorization')) {
-    config.headers.set('Authorization', `Bearer ${token}`);
+apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const token = getAccessTokenSync();
+  if (token) {
+    setAuthHeader(config, token);
   }
   return config;
 });
@@ -203,9 +206,9 @@ apiClient.interceptors.response.use(
       original._retry = true;
       const refreshed = await tryRefreshToken();
       if (refreshed) {
-        const token = await loadAccessToken();
+        const token = getAccessTokenSync();
         if (token) {
-          original.headers.set('Authorization', `Bearer ${token}`);
+          setAuthHeader(original, token);
         }
         return apiClient(original);
       }

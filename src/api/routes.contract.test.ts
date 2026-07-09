@@ -1,12 +1,18 @@
 /**
  * Contract tests — canonical driver API paths.
  */
-import { apiClient } from './client';
+import { apiClient, authClient } from './client';
 import { confirmOtp, fetchDriverMe } from './auth';
 import { listDriverDeliveries, requestProofUploadUrl } from './deliveries';
 
 jest.mock('./client', () => ({
   apiClient: {
+    get: jest.fn(),
+    post: jest.fn(),
+    delete: jest.fn(),
+    interceptors: { request: { use: jest.fn() }, response: { use: jest.fn() } },
+  },
+  authClient: {
     get: jest.fn(),
     post: jest.fn(),
     delete: jest.fn(),
@@ -25,11 +31,11 @@ describe('driver API route contracts', () => {
   });
 
   it('auth confirm uses /driver/auth/otp/confirm', async () => {
-    (apiClient.post as jest.Mock).mockResolvedValue({
+    (authClient.post as jest.Mock).mockResolvedValue({
       data: { access_token: 'x', refresh_token: 'y', driver: { id: 1, name: 'T', whatsapp: '+5511', company_id: 1 } },
     });
     await confirmOtp('+5511999998888', '123456', 'device-1');
-    expect(apiClient.post).toHaveBeenCalledWith('/driver/auth/otp/confirm', {
+    expect(authClient.post).toHaveBeenCalledWith('/driver/auth/otp/confirm', {
       whatsapp: '+5511999998888',
       otp: '123456',
       device_id: 'device-1',

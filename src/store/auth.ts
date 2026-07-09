@@ -2,7 +2,12 @@
  * Scorpius Move — Auth store (Zustand).
  */
 import { create } from 'zustand';
-import { loadAccessToken, registerSessionExpiredHandler, waitForTokenHydration } from '@/api/client';
+import {
+  getAccessTokenSync,
+  registerSessionExpiredHandler,
+  startTokenHydration,
+  waitForTokenHydration,
+} from '@/api/client';
 import { fetchDriverMe, logoutDriver, type DriverSession } from '@/api/auth';
 import { unregisterDeviceToken } from '@/api/occurrenceTypes';
 import { getDeviceId } from '@/lib/deviceId';
@@ -21,6 +26,19 @@ interface AuthState {
   setError: (error: string | null) => void;
 }
 
+async function restoreSessionFromStoredToken(): Promise<void> {
+  await waitForTokenHydration(2_000);
+  const token = getAccessTokenSync();
+  if (!token) return;
+
+  try {
+    const driver = await fetchDriverMe();
+    useAuthStore.setState({ driver, isAuthenticated: true, isLoading: false, error: null });
+  } catch {
+    // token inválido — permanece na tela de login
+  }
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   driver: null,
   isAuthenticated: false,
@@ -28,19 +46,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   error: null,
 
   bootstrap: async () => {
-    set({ isLoading: true, error: null });
-    try {
-      await waitForTokenHydration();
-      const token = await loadAccessToken();
-      if (token == null) {
-        set({ isLoading: false, isAuthenticated: false, driver: null });
-        return;
-      }
-      const driver = await fetchDriverMe();
-      set({ driver, isAuthenticated: true, isLoading: false });
-    } catch {
-      set({ isLoading: false, isAuthenticated: false, driver: null });
-    }
+    set({ isLoading: false, isAuthenticated: false, driver: null, error: null });
+    startTokenHydration();
+    void restoreSessionFromStoredToken();
   },
 
   setSession: (driver) => {

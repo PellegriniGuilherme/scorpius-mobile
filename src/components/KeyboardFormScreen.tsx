@@ -49,6 +49,7 @@ export function KeyboardFormScreen({
         <KeyboardStickyView
           testID="keyboard-form-footer"
           offset={{ closed: 0, opened: insets.bottom }}
+          pointerEvents="box-none"
           style={{
             paddingHorizontal: tokens.space[6],
             paddingTop: tokens.space[3],
@@ -59,7 +60,9 @@ export function KeyboardFormScreen({
             elevation: 8,
           }}
         >
-          {footer as never}
+          <View pointerEvents="auto" collapsable={false}>
+            {footer as never}
+          </View>
         </KeyboardStickyView>
       ) : null}
     </View>

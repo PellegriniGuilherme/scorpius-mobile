@@ -11,6 +11,7 @@
  *  - Erro genérico → mostra erro genérico
  */
 import { renderWithTheme, fireEvent, screen, waitFor } from '@/../jest.test-utils';
+import axios from 'axios';
 import { LoginScreen } from './LoginScreen';
 import * as authApi from '@/api/auth';
 
@@ -25,6 +26,7 @@ const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate, goBack: jest.fn(), reset: jest.fn() }),
   useRoute: () => ({ params: {}, key: 'test', name: 'Login' }),
+  useFocusEffect: jest.fn(),
   NavigationContainer: ({ children }: { children: React.ReactNode }) => children,
 }));
 
@@ -106,9 +108,12 @@ describe('LoginScreen', () => {
 
   // T122: 422 do check-phone → erro de telefone inválido
   it('T122: shows "telefone inválido" error when check-phone returns 422', async () => {
-    (authApi.checkPhone as jest.Mock).mockRejectedValueOnce({
-      response: { status: 422, data: { errors: { phone: ['Telefone inválido.'] } } },
-    });
+    (authApi.checkPhone as jest.Mock).mockRejectedValueOnce(
+      new axios.AxiosError('Unprocessable', undefined, undefined, undefined, {
+        status: 422,
+        data: { errors: { phone: ['Telefone inválido.'] } },
+      } as never),
+    );
 
     renderWithTheme(<LoginScreen />);
     const input = screen.getByLabelText(/whatsapp/i);
