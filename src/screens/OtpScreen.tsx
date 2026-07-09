@@ -9,7 +9,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Text, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { Button } from '@/components/Button';
-import { Input } from '@/components/Input';
+import { OtpInput } from '@/components/OtpInput';
 import { KeyboardFormScreen } from '@/components/KeyboardFormScreen';
 import { confirmOtp, requestOtp } from '@/api/auth';
 import { getDeviceId } from '@/lib/deviceId';
@@ -59,8 +59,8 @@ export function OtpScreen() {
 
   const phone = route.params?.phone ?? '';
 
-  async function handleSubmit() {
-    if (!isValidOtpCode(code)) {
+  async function handleSubmit(submittedCode = code) {
+    if (!isValidOtpCode(submittedCode)) {
       setError(ptBR.otp.errorInvalidCode);
       return;
     }
@@ -68,7 +68,7 @@ export function OtpScreen() {
     setSubmitting(true);
     try {
       const deviceId = getDeviceId();
-      const result = await confirmOtp(phone, code, deviceId);
+      const result = await confirmOtp(phone, submittedCode, deviceId);
       setSession(result.driver);
     } catch {
       setError(ptBR.otp.errorGeneric);
@@ -147,13 +147,20 @@ export function OtpScreen() {
         <Text style={{ color: colors.textMuted, fontSize: tokens.text.base }}>
           {ptBR.otp.description.replace('{phone}', phone)}
         </Text>
-        <Input
+        <OtpInput
           label={ptBR.otp.codeLabel}
           value={code}
-          onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
-          keyboardType="number-pad"
-          maxLength={6}
+          onChangeText={(v) => {
+            setCode(v);
+            if (error) setError(null);
+          }}
+          onComplete={(completedCode) => {
+            if (!submitting && !otpExpired) {
+              void handleSubmit(completedCode);
+            }
+          }}
           error={error ?? undefined}
+          disabled={otpExpired}
         />
       </View>
     </KeyboardFormScreen>
