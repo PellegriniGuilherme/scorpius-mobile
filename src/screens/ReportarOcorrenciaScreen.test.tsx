@@ -71,6 +71,7 @@ describe('ReportarOcorrenciaScreen', () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ReportarOcorrenciaScreen />);
     expect(await screen.findByText('Reportar ocorrência')).toBeTruthy();
+    expect(screen.getByText('A entrega continua')).toBeTruthy();
     expect(screen.getByTestId('occurrence-type-trigger')).toBeTruthy();
     expect(screen.getByText('Acidente')).toBeTruthy();
   });
