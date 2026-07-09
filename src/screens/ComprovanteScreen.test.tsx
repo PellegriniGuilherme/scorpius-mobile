@@ -70,6 +70,12 @@ async function setupHappyPathPickPhoto() {
   });
 }
 
+async function submitProofFlow() {
+  fireEvent.press(screen.getByRole('button', { name: 'Revisar finalização' }));
+  await waitFor(() => expect(screen.getByText('Confirmar entrega')).toBeTruthy());
+  fireEvent.press(screen.getByTestId('proof-confirm-submit'));
+}
+
 describe('ComprovanteScreen', () => {
   beforeEach(() => {
     (ImagePicker.launchCameraAsync as jest.Mock).mockReset();
@@ -110,14 +116,14 @@ describe('ComprovanteScreen', () => {
     expect(ImagePicker.launchCameraAsync).toHaveBeenCalled();
   });
 
-  it('"Finalizar entrega" disabled without photo or signature', async () => {
+  it('"Revisar finalização" disabled without photo or signature', async () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ComprovanteScreen />);
-    const submitBtn = await screen.findByRole('button', { name: 'Finalizar entrega' });
+    const submitBtn = await screen.findByRole('button', { name: 'Revisar finalização' });
     expect(submitBtn.props.accessibilityState?.disabled).toBe(true);
   });
 
-  it('"Finalizar entrega" enabled with photo + signature (≥3 chars)', async () => {
+  it('"Revisar finalização" enabled with photo + signature (≥3 chars)', async () => {
     await setupHappyPathPickPhoto();
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ComprovanteScreen />);
@@ -126,14 +132,14 @@ describe('ComprovanteScreen', () => {
     await waitFor(() => expect(screen.getByText('Tirar novamente')).toBeTruthy());
     const input = screen.getByLabelText('Nome do destinatário');
     fireEvent.changeText(input, 'João da Silva');
-    const submitBtn = screen.getByRole('button', { name: 'Finalizar entrega' });
+    const submitBtn = screen.getByRole('button', { name: 'Revisar finalização' });
     expect(submitBtn.props.accessibilityState?.disabled).toBe(false);
   });
 
-  it('"Finalizar entrega" enabled without proof when delivery has no requirements', async () => {
+  it('"Revisar finalização" enabled without proof when delivery has no requirements', async () => {
     setRouteParams({ deliveryId: 1002 });
     renderWithTheme(<ComprovanteScreen />);
-    const submitBtn = await screen.findByRole('button', { name: 'Finalizar entrega' });
+    const submitBtn = await screen.findByRole('button', { name: 'Revisar finalização' });
     expect(submitBtn.props.accessibilityState?.disabled).toBe(false);
     expect(screen.queryByText('Capturar foto')).toBeNull();
     expect(screen.queryByText('Área de assinatura')).toBeNull();
@@ -149,9 +155,9 @@ describe('ComprovanteScreen', () => {
     await waitFor(() => expect(screen.getByText('Tirar novamente')).toBeTruthy());
     const input = screen.getByLabelText('Nome do destinatário');
     fireEvent.changeText(input, 'João da Silva');
-    fireEvent.press(screen.getByRole('button', { name: 'Finalizar entrega' }));
+    await submitProofFlow();
     await waitFor(() => {
-      expect(screen.getByText('Entrega finalizada!')).toBeTruthy();
+      expect(screen.getByText('Entrega confirmada!')).toBeTruthy();
     });
     // Outbox foi consumido pelo SyncWorker (api.successUpload)
     const remaining = await outbox.getAll();
@@ -170,12 +176,9 @@ describe('ComprovanteScreen', () => {
     await waitFor(() => expect(screen.getByText('Tirar novamente')).toBeTruthy());
     const input = screen.getByLabelText('Nome do destinatário');
     fireEvent.changeText(input, 'João da Silva');
-    fireEvent.press(screen.getByRole('button', { name: 'Finalizar entrega' }));
+    await submitProofFlow();
     await waitFor(() => {
-      // Após MAX_ATTEMPTS tentativas (5) o item vai para DLQ
-      // Como tick é chamado 1x, o item fica pending com attempts=1
-      // A UI mostra "Sincronizando…" (pending)
-      expect(screen.getByText(/Sincronizando/i)).toBeTruthy();
+      expect(screen.getByText(/Sincronizando com servidor/i)).toBeTruthy();
     });
     expect(failingUpload).toHaveBeenCalled();
   });

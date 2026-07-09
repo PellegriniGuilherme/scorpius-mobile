@@ -4,6 +4,7 @@ import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { AlertBanner } from '@/components/AlertBanner';
 import { ActionChoiceCard } from '@/components/ActionChoiceCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import NetInfo from '@react-native-community/netinfo';
@@ -110,6 +111,15 @@ export function DetalheEntregaScreen() {
   const wStart = new Date(delivery.windowStart).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const wEnd = new Date(delivery.windowEnd).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const fsmAction = nextFsmAction(delivery.status);
+  const proofPhoto = delivery.proofRequirements.requires_photo;
+  const proofSignature = delivery.proofRequirements.requires_signature;
+  const proofSummary = proofPhoto && proofSignature
+    ? `${ptBR.detail.proofRequirementsPhoto} e ${ptBR.detail.proofRequirementsSignature.toLowerCase()}`
+    : proofPhoto
+      ? ptBR.detail.proofRequirementsPhoto
+      : proofSignature
+        ? ptBR.detail.proofRequirementsSignature
+        : ptBR.detail.proofRequirementsNone;
 
   return (
     <ScrollView
@@ -187,6 +197,14 @@ export function DetalheEntregaScreen() {
       ) : null}
 
       <View style={{ gap: tokens.space[3] }}>
+        {fsmAction === 'proof' && (
+          <AlertBanner
+            tone="warning"
+            title={ptBR.detail.proofRequirementsTitle}
+            message={`${proofSummary}. ${ptBR.detail.finalizeHint}`}
+            testID="detail-finalize-warning"
+          />
+        )}
         <Button label={ptBR.detail.openMap} onPress={() => navigation.navigate('MapaRota', { deliveryId: delivery.id })} fullWidth />
         {fsmAction && fsmAction !== 'proof' && (
           <Button
@@ -199,7 +217,7 @@ export function DetalheEntregaScreen() {
         {fsmAction === 'proof' && (
           <Button
             label={ptBR.detail.collectProof}
-            variant="secondary"
+            variant="primary"
             onPress={() => navigation.navigate('Comprovante', { deliveryId: delivery.id })}
             fullWidth
           />

@@ -21,6 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { AlertBanner } from '@/components/AlertBanner';
 import { Input } from '@/components/Input';
 import { SignaturePad, type SignaturePadRef } from '@/components/SignaturePad';
 import { KeyboardFormScreen } from '@/components/KeyboardFormScreen';
@@ -36,7 +37,8 @@ import type { AppStackParamList } from '@/navigation/types';
 
 type Route_ = RouteProp<AppStackParamList, 'Comprovante'>;
 
-type OutboxSyncStatus = 'idle' | 'pending' | 'failed';
+type OutboxSyncStatus = 'idle' | 'pending' | 'failed' | 'confirmed';
+type ProofPhase = 'capture' | 'confirm';
 
 export function ComprovanteScreen() {
   const route = useRoute<Route_>();
@@ -74,11 +76,13 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
   const { colors, tokens } = useTheme();
   const signaturePadRef = useRef<SignaturePadRef>(null);
   const [photoPath, setPhotoPath] = useState<string | null>(null);
+  const [signaturePath, setSignaturePath] = useState<string | null>(null);
   const [hasSignature, setHasSignature] = useState(false);
   const [signatureName, setSignatureName] = useState('');
   const [outboxId, setOutboxId] = useState<number | null>(null);
   const [syncStatus, setSyncStatus] = useState<OutboxSyncStatus>('idle');
   const [submitted, setSubmitted] = useState(false);
+  const [phase, setPhase] = useState<ProofPhase>('capture');
   const [capturing, setCapturing] = useState(false);
 
   // T098 — DLQ UI: badge + modal com items falhados + retry manual
@@ -122,6 +126,14 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
   const canSubmit =
     (!requiresPhoto || hasPhoto) &&
     (!requiresSignature || (hasSignature && signatureName.trim().length >= 3));
+
+  const missingHint = !canSubmit
+    ? requiresPhoto && !hasPhoto
+      ? ptBR.proof.missingPhoto
+      : requiresSignature && (!hasSignature || signatureName.trim().length < 3)
+        ? ptBR.proof.missingSignature
+        : null
+    : null;
 
   async function persistSignatureImage(): Promise<string> {
     const capturedUri = await signaturePadRef.current?.captureToCacheFile(`sig-${delivery.id}`);
@@ -171,16 +183,23 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
     }
   }
 
+  async function handleReview() {
+    if (!canSubmit) return;
+    if (requiresSignature && hasSignature) {
+      const captured = await persistSignatureImage();
+      setSignaturePath(captured);
+    }
+    setPhase('confirm');
+  }
+
   async function handleSubmit() {
     if (!canSubmit) return;
-    let signaturePath: string | undefined;
-    if (requiresSignature && hasSignature) {
-      signaturePath = await persistSignatureImage();
-    }
+    const resolvedSignaturePath =
+      signaturePath ?? (requiresSignature && hasSignature ? await persistSignatureImage() : undefined);
     const id = await outbox.enqueue('proof_upload', {
       deliveryId: delivery.id,
       ...(photoPath ? { photoPath } : {}),
-      ...(signaturePath ? { signaturePath } : {}),
+      ...(resolvedSignaturePath ? { signaturePath: resolvedSignaturePath } : {}),
       ...(signatureName.trim() ? { signatureName: signatureName.trim() } : {}),
       requiresPhoto,
       requiresSignature,
@@ -202,7 +221,7 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
     if (stillThere) {
       setSyncStatus(stillThere.next_retry_at === 0 ? 'failed' : 'pending');
     } else {
-      setSyncStatus('pending'); // Saiu, mas ainda mostra "Sincronizando" brevemente
+      setSyncStatus('confirmed');
     }
   }
 
@@ -221,6 +240,19 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
   }
 
   if (submitted) {
+    const successTitle =
+      syncStatus === 'confirmed'
+        ? ptBR.proof.successTitleConfirmed
+        : syncStatus === 'failed'
+          ? ptBR.proof.successTitleQueued
+          : ptBR.proof.successTitleQueued;
+    const successDesc =
+      syncStatus === 'confirmed'
+        ? ptBR.proof.successDescConfirmed
+        : syncStatus === 'failed'
+          ? ptBR.proof.syncFailed
+          : ptBR.proof.successDescQueued;
+
     return (
       <View
         style={{
@@ -234,26 +266,104 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
       >
         <Text style={{ fontSize: 60, color: colors.statusSuccessMarker, fontWeight: tokens.weight.bold }}>✓</Text>
         <Text style={{ fontSize: tokens.text['2xl'], fontWeight: tokens.weight.bold, color: colors.statusSuccessText, textAlign: 'center' }}>
-          {ptBR.proof.successTitle}
+          {successTitle}
         </Text>
-        <Text style={{ fontSize: tokens.text.base, color: colors.textMuted, textAlign: 'center' }}>
-          {ptBR.proof.successDesc}
+        <Text style={{ fontSize: tokens.text.base, color: colors.textMuted, textAlign: 'center', lineHeight: 22 }}>
+          {successDesc}
         </Text>
         {syncStatus === 'pending' && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[2], marginTop: tokens.space[4] }}>
             <ActivityIndicator color={colors.accent} size="small" />
-            <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm }}>Sincronizando com servidor…</Text>
+            <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm }}>{ptBR.proof.syncPending}</Text>
           </View>
         )}
         {syncStatus === 'failed' && (
-          <View style={{ marginTop: tokens.space[4], gap: tokens.space[2] }}>
-            <Text style={{ color: colors.statusDangerText, fontSize: tokens.text.sm, textAlign: 'center' }}>
-              Falhou ao enviar. Tente novamente.
-            </Text>
-            <Button label="Reenviar" variant="secondary" onPress={handleRetry} />
+          <View style={{ marginTop: tokens.space[4], gap: tokens.space[2], width: '100%' }}>
+            <AlertBanner tone="danger" message={ptBR.proof.syncFailed} testID="proof-sync-failed-banner" />
+            <Button label={ptBR.proof.retry} variant="secondary" onPress={handleRetry} fullWidth />
           </View>
         )}
+        {syncStatus === 'confirmed' && (
+          <AlertBanner tone="success" message={ptBR.proof.successDescConfirmed} testID="proof-sync-confirmed-banner" />
+        )}
       </View>
+    );
+  }
+
+  if (phase === 'confirm') {
+    return (
+      <KeyboardFormScreen
+        contentContainerStyle={{ gap: tokens.space[5] }}
+        footer={
+          <View style={{ gap: tokens.space[3] }}>
+            <Button
+              testID="proof-confirm-submit"
+              label={ptBR.proof.confirmActionExplicit}
+              onPress={() => void handleSubmit()}
+              fullWidth
+            />
+            <Button
+              testID="proof-confirm-back"
+              label={ptBR.proof.back}
+              variant="ghost"
+              onPress={() => setPhase('capture')}
+              fullWidth
+            />
+          </View>
+        }
+      >
+        <View style={{ gap: tokens.space[1] }}>
+          <Text style={{ fontSize: tokens.text['2xl'], fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
+            {ptBR.proof.confirmTitle}
+          </Text>
+          <Text style={{ fontSize: tokens.text.sm, color: colors.textMuted }}>Entrega #{delivery.code}</Text>
+        </View>
+
+        <Card
+          style={{
+            backgroundColor: colors.statusWarningSurface,
+            borderColor: colors.statusWarningBorder,
+          }}
+        >
+          <Text style={{ fontSize: tokens.text.base, fontWeight: tokens.weight.semibold, color: colors.statusWarningText }}>
+            {ptBR.proof.confirmConsequencesTitle}
+          </Text>
+          <View style={{ marginTop: tokens.space[3], gap: tokens.space[2] }}>
+            {[
+              ptBR.proof.confirmConsequence1,
+              ptBR.proof.confirmConsequence2,
+              ptBR.proof.confirmConsequence3,
+              ptBR.proof.confirmConsequence4,
+            ].map((line) => (
+              <Text key={line} style={{ color: colors.textSecondary, fontSize: tokens.text.sm, lineHeight: 20 }}>
+                • {line}
+              </Text>
+            ))}
+          </View>
+        </Card>
+
+        {(requiresPhoto || requiresSignature) && (
+          <Card>
+            <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, textTransform: 'uppercase' }}>
+              Comprovante
+            </Text>
+            <View style={{ marginTop: tokens.space[2], gap: tokens.space[1] }}>
+              {requiresPhoto ? (
+                <Text style={{ color: colors.textPrimary, fontSize: tokens.text.sm }}>
+                  {hasPhoto ? '✓ Foto capturada' : '✗ Foto pendente'}
+                </Text>
+              ) : null}
+              {requiresSignature ? (
+                <Text style={{ color: colors.textPrimary, fontSize: tokens.text.sm }}>
+                  {hasSignature && signatureName.trim().length >= 3
+                    ? `✓ Assinatura de ${signatureName.trim()}`
+                    : '✗ Assinatura pendente'}
+                </Text>
+              ) : null}
+            </View>
+          </Card>
+        )}
+      </KeyboardFormScreen>
     );
   }
 
@@ -262,7 +372,20 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
       <KeyboardFormScreen
         contentContainerStyle={{ gap: tokens.space[5] }}
         footer={
-          <Button label={ptBR.proof.submit} onPress={handleSubmit} disabled={!canSubmit} fullWidth />
+          <View style={{ gap: tokens.space[2] }}>
+            {missingHint ? (
+              <Text style={{ color: colors.statusWarningText, fontSize: tokens.text.sm, textAlign: 'center' }}>
+                {missingHint}
+              </Text>
+            ) : null}
+            <Button
+              testID="proof-review"
+              label={ptBR.proof.review}
+              onPress={() => void handleReview()}
+              disabled={!canSubmit}
+              fullWidth
+            />
+          </View>
         }
       >
         <View style={{ gap: tokens.space[1] }}>
@@ -271,6 +394,8 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
           </Text>
           <Text style={{ fontSize: tokens.text.sm, color: colors.textMuted }}>Entrega #{delivery.code}</Text>
         </View>
+
+        <AlertBanner tone="warning" title={ptBR.proof.confirmConsequencesTitle} message={ptBR.proof.formHint} testID="proof-form-warning" />
 
         {dlqCount > 0 && (
           <Pressable
