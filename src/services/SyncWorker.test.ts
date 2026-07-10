@@ -30,12 +30,10 @@ jest.mock('react-native/Libraries/AppState/AppState', () => ({
 }));
 
 jest.mock('@/api/deliveries', () => ({
-  requestProofUploadUrl: jest.fn().mockResolvedValue({
-    url: 'http://mock/spaces/abc?sig=1',
-    key: 'k',
+  uploadDeliveryFile: jest.fn().mockResolvedValue({
+    key: 'companies/1/proof/k.jpg',
+    url: 'https://sfo3.digitaloceanspaces.com/scorpius.hub/companies/1/proof/k.jpg',
     content_type: 'image/jpeg',
-    expires_at: '',
-    method: 'PUT',
   }),
   storeDeliveryProof: jest.fn().mockResolvedValue(undefined),
   completeDelivery: jest.fn().mockResolvedValue({}),

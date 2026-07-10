@@ -10,20 +10,16 @@ import { syncWorker } from '@/services/SyncWorker';
 import * as deliveries from '@/api/deliveries';
 
 jest.mock('@/api/deliveries', () => ({
-  requestProofUploadUrl: jest.fn(),
+  uploadDeliveryFile: jest.fn(),
   storeDeliveryProof: jest.fn(),
   completeDelivery: jest.fn(),
 }));
 
 describe('boot wiring', () => {
-  const mockFetch = jest.fn();
-
   beforeEach(() => {
     _resetSyncWorkerBootForTests();
     jest.restoreAllMocks();
-    global.fetch = mockFetch as typeof fetch;
-    mockFetch.mockReset();
-    (deliveries.requestProofUploadUrl as jest.Mock).mockReset();
+    (deliveries.uploadDeliveryFile as jest.Mock).mockReset();
     (deliveries.storeDeliveryProof as jest.Mock).mockReset();
     (deliveries.completeDelivery as jest.Mock).mockReset();
   });
@@ -45,27 +41,18 @@ describe('boot wiring', () => {
   });
 
   describe('createProofUploadAdapter', () => {
-    it('faz upload-url → PUT binary → proof → complete', async () => {
-      (deliveries.requestProofUploadUrl as jest.Mock)
+    it('faz upload multipart → proof → complete', async () => {
+      (deliveries.uploadDeliveryFile as jest.Mock)
         .mockResolvedValueOnce({
-          url: 'http://mock/spaces/photo?sig=1',
-          key: 'proofs/photo.jpg',
+          key: 'companies/1/proof/photo.jpg',
+          url: 'https://sfo3.digitaloceanspaces.com/scorpius.hub/companies/1/proof/photo.jpg',
           content_type: 'image/jpeg',
-          expires_at: '',
-          method: 'PUT',
         })
         .mockResolvedValueOnce({
-          url: 'http://mock/spaces/sig?sig=1',
-          key: 'proofs/sig.png',
+          key: 'companies/1/proof/sig.png',
+          url: 'https://sfo3.digitaloceanspaces.com/scorpius.hub/companies/1/proof/sig.png',
           content_type: 'image/png',
-          expires_at: '',
-          method: 'PUT',
         });
-      mockFetch
-        .mockResolvedValueOnce({ blob: async () => new Blob(['photo']) })
-        .mockResolvedValueOnce({ ok: true })
-        .mockResolvedValueOnce({ blob: async () => new Blob(['sig']) })
-        .mockResolvedValueOnce({ ok: true });
       (deliveries.storeDeliveryProof as jest.Mock).mockResolvedValue(undefined);
       (deliveries.completeDelivery as jest.Mock).mockResolvedValue({});
 
@@ -77,40 +64,37 @@ describe('boot wiring', () => {
         signatureName: 'João da Silva',
       });
 
-      expect(deliveries.requestProofUploadUrl).toHaveBeenNthCalledWith(
+      expect(deliveries.uploadDeliveryFile).toHaveBeenNthCalledWith(
         1,
         1001,
         'proof_of_delivery',
+        'file:///cache/proofs/1001.jpg',
         'image/jpeg',
       );
-      expect(deliveries.requestProofUploadUrl).toHaveBeenNthCalledWith(
+      expect(deliveries.uploadDeliveryFile).toHaveBeenNthCalledWith(
         2,
         1001,
         'signature',
+        'file:///cache/proofs/1001-sig.png',
         'image/png',
       );
       expect(deliveries.storeDeliveryProof).toHaveBeenCalledWith(1001, {
-        photo_url: 'http://mock/spaces/photo',
-        signature_url: 'http://mock/spaces/sig',
+        photo_url: 'https://sfo3.digitaloceanspaces.com/scorpius.hub/companies/1/proof/photo.jpg',
+        signature_url: 'https://sfo3.digitaloceanspaces.com/scorpius.hub/companies/1/proof/sig.png',
       });
       expect(deliveries.completeDelivery).toHaveBeenCalledWith(1001, {
-        photo_url: 'http://mock/spaces/photo',
-        signature_url: 'http://mock/spaces/sig',
+        photo_url: 'https://sfo3.digitaloceanspaces.com/scorpius.hub/companies/1/proof/photo.jpg',
+        signature_url: 'https://sfo3.digitaloceanspaces.com/scorpius.hub/companies/1/proof/sig.png',
         notes: 'Assinado por: João da Silva',
       });
     });
 
     it('faz upload parcial quando só foto é enviada', async () => {
-      (deliveries.requestProofUploadUrl as jest.Mock).mockResolvedValueOnce({
-        url: 'http://mock/spaces/photo?sig=1',
-        key: 'proofs/photo.jpg',
+      (deliveries.uploadDeliveryFile as jest.Mock).mockResolvedValueOnce({
+        key: 'companies/1/proof/photo.jpg',
+        url: 'https://sfo3.digitaloceanspaces.com/scorpius.hub/companies/1/proof/photo.jpg',
         content_type: 'image/jpeg',
-        expires_at: '',
-        method: 'PUT',
       });
-      mockFetch
-        .mockResolvedValueOnce({ blob: async () => new Blob(['photo']) })
-        .mockResolvedValueOnce({ ok: true });
       (deliveries.storeDeliveryProof as jest.Mock).mockResolvedValue(undefined);
       (deliveries.completeDelivery as jest.Mock).mockResolvedValue({});
 
@@ -122,12 +106,12 @@ describe('boot wiring', () => {
         requiresSignature: false,
       });
 
-      expect(deliveries.requestProofUploadUrl).toHaveBeenCalledTimes(1);
+      expect(deliveries.uploadDeliveryFile).toHaveBeenCalledTimes(1);
       expect(deliveries.storeDeliveryProof).toHaveBeenCalledWith(1001, {
-        photo_url: 'http://mock/spaces/photo',
+        photo_url: 'https://sfo3.digitaloceanspaces.com/scorpius.hub/companies/1/proof/photo.jpg',
       });
       expect(deliveries.completeDelivery).toHaveBeenCalledWith(1001, {
-        photo_url: 'http://mock/spaces/photo',
+        photo_url: 'https://sfo3.digitaloceanspaces.com/scorpius.hub/companies/1/proof/photo.jpg',
       });
     });
 
@@ -141,13 +125,13 @@ describe('boot wiring', () => {
         requiresSignature: false,
       });
 
-      expect(deliveries.requestProofUploadUrl).not.toHaveBeenCalled();
+      expect(deliveries.uploadDeliveryFile).not.toHaveBeenCalled();
       expect(deliveries.storeDeliveryProof).not.toHaveBeenCalled();
       expect(deliveries.completeDelivery).toHaveBeenCalledWith(1002, {});
     });
 
     it('propaga erros do backend', async () => {
-      (deliveries.requestProofUploadUrl as jest.Mock).mockRejectedValue(new Error('network error'));
+      (deliveries.uploadDeliveryFile as jest.Mock).mockRejectedValue(new Error('network error'));
 
       const adapter = createProofUploadAdapter();
       await expect(
@@ -160,17 +144,8 @@ describe('boot wiring', () => {
       ).rejects.toThrow('network error');
     });
 
-    it('falha se PUT presigned retornar erro', async () => {
-      (deliveries.requestProofUploadUrl as jest.Mock).mockResolvedValue({
-        url: 'http://mock/spaces/abc',
-        key: 'k',
-        content_type: 'image/jpeg',
-        expires_at: '',
-        method: 'PUT',
-      });
-      mockFetch
-        .mockResolvedValueOnce({ blob: async () => new Blob(['photo']) })
-        .mockResolvedValueOnce({ ok: false, status: 403 });
+    it('falha se upload proxy retornar erro', async () => {
+      (deliveries.uploadDeliveryFile as jest.Mock).mockRejectedValue(new Error('Upload to storage failed'));
 
       const adapter = createProofUploadAdapter();
       await expect(
@@ -180,7 +155,7 @@ describe('boot wiring', () => {
           signaturePath: '/x-sig.png',
           signatureName: 'sig',
         }),
-      ).rejects.toThrow('Presigned upload failed: 403');
+      ).rejects.toThrow('Upload to storage failed');
     });
   });
 });

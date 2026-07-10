@@ -47,22 +47,30 @@ export async function failDelivery(id: number, reason: string): Promise<Delivery
   return data.data;
 }
 
-export interface PresignedUploadResponse {
-  url: string;
+export interface DeliveryFileUploadResponse {
   key: string;
-  expires_at: string;
-  method: string;
+  url: string;
   content_type: string;
 }
 
-export async function requestProofUploadUrl(
+export async function uploadDeliveryFile(
   deliveryId: number,
   documentType: 'proof_of_delivery' | 'signature' | 'occurrence_photo',
+  localUri: string,
   contentType: 'image/jpeg' | 'image/png' = 'image/jpeg',
-): Promise<PresignedUploadResponse> {
-  const { data } = await apiClient.post<{ data: PresignedUploadResponse }>(
-    `/driver/deliveries/${deliveryId}/upload-url`,
-    { document_type: documentType, content_type: contentType },
+): Promise<DeliveryFileUploadResponse> {
+  const formData = new FormData();
+  formData.append('document_type', documentType);
+  formData.append('file', {
+    uri: localUri,
+    name: documentType === 'signature' ? 'signature.png' : 'photo.jpg',
+    type: contentType,
+  } as unknown as Blob);
+
+  const { data } = await apiClient.post<{ data: DeliveryFileUploadResponse }>(
+    `/driver/deliveries/${deliveryId}/upload`,
+    formData,
+    { timeout: 60_000 },
   );
   return data.data;
 }

@@ -3,7 +3,7 @@
  */
 import { apiClient, authClient } from './client';
 import { confirmOtp, fetchDriverMe } from './auth';
-import { listDriverDeliveries, requestProofUploadUrl } from './deliveries';
+import { listDriverDeliveries, uploadDeliveryFile } from './deliveries';
 
 jest.mock('./client', () => ({
   apiClient: {
@@ -56,14 +56,21 @@ describe('driver API route contracts', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/driver/deliveries', { params: { status: 'assigned' } });
   });
 
-  it('requestProofUploadUrl uses driver upload-url path', async () => {
+  it('uploadDeliveryFile uses driver upload path with FormData', async () => {
     (apiClient.post as jest.Mock).mockResolvedValue({
-      data: { data: { url: 'http://x', key: 'k', content_type: 'image/jpeg', expires_at: '', method: 'PUT' } },
+      data: {
+        data: {
+          key: 'companies/1/proof/x.jpg',
+          url: 'https://sfo3.digitaloceanspaces.com/scorpius.hub/companies/1/proof/x.jpg',
+          content_type: 'image/jpeg',
+        },
+      },
     });
-    await requestProofUploadUrl(42, 'proof_of_delivery', 'image/jpeg');
-    expect(apiClient.post).toHaveBeenCalledWith('/driver/deliveries/42/upload-url', {
-      document_type: 'proof_of_delivery',
-      content_type: 'image/jpeg',
-    });
+    await uploadDeliveryFile(42, 'proof_of_delivery', 'file:///photo.jpg', 'image/jpeg');
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/driver/deliveries/42/upload',
+      expect.any(FormData),
+      { timeout: 60_000 },
+    );
   });
 });

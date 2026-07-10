@@ -2,7 +2,7 @@
  * Scorpius Move — SyncWorker + OutboxService E2E integration test (T106).
  */
 jest.mock('@/api/deliveries', () => ({
-  requestProofUploadUrl: jest.fn(),
+  uploadDeliveryFile: jest.fn(),
   storeDeliveryProof: jest.fn(),
   completeDelivery: jest.fn(),
 }));
@@ -15,29 +15,17 @@ import { __resetMockDb } from '../../jest.sqlite-mock.js';
 
 describe('SyncWorker E2E integration (T106 — R-M3)', () => {
   let freshOutbox: OutboxService;
-  const mockFetch = jest.fn();
 
   beforeEach(async () => {
     __resetMockDb();
     _resetSyncWorkerBootForTests();
-    global.fetch = mockFetch as typeof fetch;
-    mockFetch.mockReset();
-    (deliveries.requestProofUploadUrl as jest.Mock).mockResolvedValue({
-      url: 'http://mock-spaces/upload/abc?sig=1',
-      key: 'proofs/abc.jpg',
+    (deliveries.uploadDeliveryFile as jest.Mock).mockResolvedValue({
+      key: 'companies/1/proof/abc.jpg',
+      url: 'https://sfo3.digitaloceanspaces.com/scorpius.hub/companies/1/proof/abc.jpg',
       content_type: 'image/jpeg',
-      expires_at: '',
-      method: 'PUT',
     });
     (deliveries.storeDeliveryProof as jest.Mock).mockResolvedValue(undefined);
     (deliveries.completeDelivery as jest.Mock).mockResolvedValue({});
-    mockFetch.mockImplementation((url: string | URL | Request, init?: RequestInit) => {
-      if (init?.method === 'PUT') {
-        return Promise.resolve({ ok: true });
-      }
-      return Promise.resolve({ blob: async () => new Blob(['photo']) });
-    });
-    // Reset singleton internal state via type assertion (test-only).
     const w = syncWorker as unknown as {
       isOnline: boolean;
       isAppActive: boolean;
@@ -56,15 +44,12 @@ describe('SyncWorker E2E integration (T106 — R-M3)', () => {
     setupSyncWorker();
     freshOutbox = new OutboxService();
     await freshOutbox.init();
-    // IMPORTANTE: syncWorker precisa usar freshOutbox (defaultOutbox é o
-    // singleton com DB stale após resetMockDb).
     syncWorker.setOutbox(freshOutbox);
   });
 
   afterEach(async () => {
     await freshOutbox.close();
     syncWorker.setApiClient(null as never);
-    // Reset outbox to singleton for next test isolation
     syncWorker.setOutbox(defaultOutbox);
   });
 
@@ -78,15 +63,20 @@ describe('SyncWorker E2E integration (T106 — R-M3)', () => {
     const processed = await syncWorker.tick();
     expect(processed).toBe(true);
 
-    expect(deliveries.requestProofUploadUrl).toHaveBeenCalledWith(1001, 'proof_of_delivery', 'image/jpeg');
+    expect(deliveries.uploadDeliveryFile).toHaveBeenCalledWith(
+      1001,
+      'proof_of_delivery',
+      '/cache/proofs/1001.jpg',
+      'image/jpeg',
+    );
     expect(deliveries.completeDelivery).toHaveBeenCalled();
 
     const after = await freshOutbox.getAll();
     expect(after.find((i) => i.id === id)).toBeUndefined();
   });
 
-  it('falha 500 no pre-signed: item fica pending com backoff (não loop infinito)', async () => {
-    (deliveries.requestProofUploadUrl as jest.Mock).mockRejectedValueOnce(new Error('500 server error'));
+  it('falha 500 no upload proxy: item fica pending com backoff (não loop infinito)', async () => {
+    (deliveries.uploadDeliveryFile as jest.Mock).mockRejectedValueOnce(new Error('500 server error'));
 
     const id = await freshOutbox.enqueue('proof_upload', {
       deliveryId: 2002,
@@ -105,11 +95,8 @@ describe('SyncWorker E2E integration (T106 — R-M3)', () => {
     expect(item?.next_retry_at).toBeGreaterThan(Date.now() - 1000);
   });
 
-  it('falha no PUT Spaces: item fica pending com backoff', async () => {
-    mockFetch.mockReset();
-    mockFetch
-      .mockResolvedValueOnce({ blob: async () => new Blob(['photo']) })
-      .mockResolvedValueOnce({ ok: false, status: 500 });
+  it('falha no upload proxy: item fica pending com backoff', async () => {
+    (deliveries.uploadDeliveryFile as jest.Mock).mockRejectedValueOnce(new Error('Upload to storage failed'));
 
     const id = await freshOutbox.enqueue('proof_upload', {
       deliveryId: 3003,
@@ -123,7 +110,7 @@ describe('SyncWorker E2E integration (T106 — R-M3)', () => {
     const item = after.find((i) => i.id === id);
     expect(item).toBeDefined();
     expect(item?.attempts).toBe(1);
-    expect(item?.last_error).toContain('Presigned upload failed');
+    expect(item?.last_error).toContain('Upload to storage failed');
   });
 
   it('falha no POST /complete: item fica pending com backoff', async () => {

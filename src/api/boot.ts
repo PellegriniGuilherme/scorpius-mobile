@@ -3,24 +3,20 @@
  */
 import {
   completeDelivery,
-  requestProofUploadUrl,
   storeDeliveryProof,
+  uploadDeliveryFile,
 } from '@/api/deliveries';
 import { applyServerDelivery } from '@/services/deliveryMutationService';
 import { syncWorker, type ApiClient, type ProofUploadPayload } from '@/services/SyncWorker';
 
-async function uploadBinaryToPresignedUrl(localUri: string, uploadUrl: string, contentType: string): Promise<string> {
-  const fileResponse = await fetch(localUri);
-  const blob = await fileResponse.blob();
-  const putResponse = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': contentType },
-    body: blob,
-  });
-  if (!putResponse.ok) {
-    throw new Error(`Presigned upload failed: ${putResponse.status}`);
-  }
-  return uploadUrl.split('?')[0] ?? uploadUrl;
+async function uploadLocalFileToBackend(
+  localUri: string,
+  deliveryId: number,
+  documentType: 'proof_of_delivery' | 'signature' | 'occurrence_photo',
+  contentType: 'image/jpeg' | 'image/png',
+): Promise<{ key: string; url: string }> {
+  const uploaded = await uploadDeliveryFile(deliveryId, documentType, localUri, contentType);
+  return { key: uploaded.key, url: uploaded.url };
 }
 
 export function createProofUploadAdapter(): ApiClient {
@@ -34,22 +30,24 @@ export function createProofUploadAdapter(): ApiClient {
 
       let photoUrl: string | undefined;
       if (payload.photoPath) {
-        const photoPresign = await requestProofUploadUrl(payload.deliveryId, 'proof_of_delivery', 'image/jpeg');
-        photoUrl = await uploadBinaryToPresignedUrl(
+        const uploaded = await uploadLocalFileToBackend(
           payload.photoPath,
-          photoPresign.url,
-          photoPresign.content_type,
+          payload.deliveryId,
+          'proof_of_delivery',
+          'image/jpeg',
         );
+        photoUrl = uploaded.url;
       }
 
       let signatureUrl: string | undefined;
       if (payload.signaturePath) {
-        const signaturePresign = await requestProofUploadUrl(payload.deliveryId, 'signature', 'image/png');
-        signatureUrl = await uploadBinaryToPresignedUrl(
+        const uploaded = await uploadLocalFileToBackend(
           payload.signaturePath,
-          signaturePresign.url,
-          signaturePresign.content_type,
+          payload.deliveryId,
+          'signature',
+          'image/png',
         );
+        signatureUrl = uploaded.url;
       }
 
       if (photoUrl || signatureUrl) {
@@ -83,17 +81,16 @@ export function createSyncApiClient(): ApiClient {
     },
     async uploadOccurrence(payload) {
       const { ingestOccurrences } = await import('@/api/sync');
-      const { requestProofUploadUrl } = await import('@/api/deliveries');
 
       let photoPaths = payload.occurrence.photo_paths;
       if (payload.photoPath) {
-        const presign = await requestProofUploadUrl(
+        const uploaded = await uploadLocalFileToBackend(
+          payload.photoPath,
           payload.occurrence.delivery_id,
           'occurrence_photo',
           'image/jpeg',
         );
-        await uploadBinaryToPresignedUrl(payload.photoPath, presign.url, presign.content_type);
-        photoPaths = [presign.key];
+        photoPaths = [uploaded.key];
       }
 
       await ingestOccurrences(payload.batchId, [
