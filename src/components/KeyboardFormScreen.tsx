@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { View, type ViewStyle } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 import {
   KeyboardAwareScrollView,
   KeyboardStickyView,
@@ -8,11 +8,16 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme/ThemeProvider';
 
+/** Reserva mínima do footer antes do `onLayout` medir a altura real (botão + paddings). */
+export const KEYBOARD_FORM_ESTIMATED_FOOTER_HEIGHT = 96;
+
 export interface KeyboardFormScreenProps {
   children: ReactNode;
   footer?: ReactNode;
   centered?: boolean;
   contentContainerStyle?: ViewStyle;
+  /** Espaço extra entre o input focado e o teclado/footer. */
+  extraKeyboardSpace?: number;
 }
 
 export function KeyboardFormScreen({
@@ -20,10 +25,25 @@ export function KeyboardFormScreen({
   footer,
   centered = false,
   contentContainerStyle,
+  extraKeyboardSpace,
 }: KeyboardFormScreenProps) {
   const { colors, tokens } = useTheme();
   const insets = useSafeAreaInsets();
   const { isVisible: keyboardVisible } = useKeyboardState();
+  const [footerHeight, setFooterHeight] = useState(0);
+
+  const handleFooterLayout = (event: LayoutChangeEvent) => {
+    const nextHeight = event.nativeEvent.layout.height;
+    setFooterHeight((current) => (current === nextHeight ? current : nextHeight));
+  };
+
+  const footerReserve = footer
+    ? Math.max(footerHeight, KEYBOARD_FORM_ESTIMATED_FOOTER_HEIGHT)
+    : 0;
+  const keyboardGap = extraKeyboardSpace ?? tokens.space[4];
+  const scrollBottomPadding = footer
+    ? footerReserve + tokens.space[4]
+    : tokens.space[6] + insets.bottom;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -35,12 +55,13 @@ export function KeyboardFormScreen({
           justifyContent: centered && !keyboardVisible ? 'center' : 'flex-start',
           paddingHorizontal: tokens.space[6],
           paddingTop: tokens.space[6] + insets.top,
-          paddingBottom: footer ? tokens.space[4] : tokens.space[6] + insets.bottom,
+          paddingBottom: scrollBottomPadding,
           gap: tokens.space[6],
           ...contentContainerStyle,
         }}
         keyboardShouldPersistTaps="handled"
-        bottomOffset={footer ? tokens.space[4] : insets.bottom}
+        bottomOffset={footer ? footerReserve + keyboardGap : insets.bottom}
+        extraKeyboardSpace={keyboardGap}
       >
         {/* react-native-keyboard-controller types target @types/react@18; cast for React 19 */}
         {children as never}
@@ -50,6 +71,7 @@ export function KeyboardFormScreen({
           testID="keyboard-form-footer"
           offset={{ closed: 0, opened: insets.bottom }}
           pointerEvents="box-none"
+          onLayout={handleFooterLayout}
           style={{
             paddingHorizontal: tokens.space[6],
             paddingTop: tokens.space[3],

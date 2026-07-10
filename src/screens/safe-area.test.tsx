@@ -16,6 +16,7 @@
 
 import type { EdgeInsets, Metrics } from 'react-native-safe-area-context';
 import { renderWithTheme, screen } from '@/../jest.test-utils';
+import { KEYBOARD_FORM_ESTIMATED_FOOTER_HEIGHT } from '@/components/KeyboardFormScreen';
 import { LoginScreen } from './LoginScreen';
 import { OtpScreen } from './OtpScreen';
 
@@ -61,8 +62,8 @@ const IPAD_PRO_INSETS: EdgeInsets = { top: 24, bottom: 20, left: 0, right: 0 };
 
 // Base padding aplicado pelo scroll (theme tokens.space[6] = 24).
 const BASE_PADDING = 24;
-// Com footer sticky, paddingBottom do scroll usa tokens.space[4] = 16.
-const SCROLL_PADDING_BOTTOM_WITH_FOOTER = 16;
+// Com footer sticky, paddingBottom do scroll reserva altura do footer + tokens.space[4].
+const SCROLL_PADDING_BOTTOM_WITH_FOOTER = KEYBOARD_FORM_ESTIMATED_FOOTER_HEIGHT + 16;
 // Footer sticky aplica tokens.space[4] + insets.bottom.
 const FOOTER_BASE_PADDING_BOTTOM = 16;
 

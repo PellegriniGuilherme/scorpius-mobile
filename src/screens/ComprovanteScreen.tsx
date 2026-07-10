@@ -489,6 +489,13 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
             {ptBR.proof.signatureAreaLabel} {ptBR.proof.requiredSuffix}
           </Text>
           <View style={{ gap: tokens.space[2], marginTop: tokens.space[3] }}>
+            <Input
+              label={ptBR.proof.signatureLabel}
+              hint={ptBR.proof.signatureAreaHint}
+              placeholder="Ex.: Maria Santos"
+              value={signatureName}
+              onChangeText={setSignatureName}
+            />
             <SignaturePad
               ref={signaturePadRef}
               testID="proof-signature-pad"
@@ -500,13 +507,6 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
               onPress={() => signaturePadRef.current?.clear()}
               disabled={!hasSignature}
               fullWidth
-            />
-            <Input
-              label={ptBR.proof.signatureLabel}
-              hint={ptBR.proof.signatureAreaHint}
-              placeholder="Ex.: Maria Santos"
-              value={signatureName}
-              onChangeText={setSignatureName}
             />
           </View>
         </Card>

@@ -1,6 +1,6 @@
 import { Text } from 'react-native';
 import { renderWithTheme, screen } from '@/../jest.test-utils';
-import { KeyboardFormScreen } from './KeyboardFormScreen';
+import { KEYBOARD_FORM_ESTIMATED_FOOTER_HEIGHT, KeyboardFormScreen } from './KeyboardFormScreen';
 
 describe('KeyboardFormScreen', () => {
   it('renders children and footer', () => {
@@ -30,5 +30,18 @@ describe('KeyboardFormScreen', () => {
     const scroll = screen.getByTestId('keyboard-form-scroll');
     expect(scroll.props.contentContainerStyle.paddingTop).toBe(71);
     expect(scroll.props.contentContainerStyle.paddingBottom).toBe(58);
+  });
+
+  it('reserves footer height for keyboard avoidance when footer is present', () => {
+    renderWithTheme(
+      <KeyboardFormScreen footer={<Text>Footer action</Text>}>
+        <Text>Form content</Text>
+      </KeyboardFormScreen>
+    );
+
+    const scroll = screen.getByTestId('keyboard-form-scroll');
+    expect(scroll.props.contentContainerStyle.paddingBottom).toBe(KEYBOARD_FORM_ESTIMATED_FOOTER_HEIGHT + 16);
+    expect(scroll.props.bottomOffset).toBe(KEYBOARD_FORM_ESTIMATED_FOOTER_HEIGHT + 16);
+    expect(scroll.props.extraKeyboardSpace).toBe(16);
   });
 });

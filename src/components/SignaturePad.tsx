@@ -58,11 +58,9 @@ export const SignaturePad = forwardRef<SignaturePadRef, SignaturePadProps>(funct
       },
       onPanResponderRelease: () => {
         if (strokePoints.current.length > 1) {
-          setPaths((prev) => {
-            const next = [...prev, pointsToPath(strokePoints.current)];
-            onChange?.(next.length > 0);
-            return next;
-          });
+          const completedPath = pointsToPath(strokePoints.current);
+          setPaths((prev) => [...prev, completedPath]);
+          onChange?.(true);
         }
         strokePoints.current = [];
         setLivePath(null);
