@@ -1,23 +1,9 @@
-import * as SQLite from 'expo-sqlite';
+import { getCacheDatabase, resetCacheDatabaseForTests } from '@/services/sqlite/cacheDatabase';
 import type { DeliveryApi } from '@/types/delivery';
 
-const DB_NAME = 'scorpius-move-cache.db';
-
 export class DeliveryCacheService {
-  private db: SQLite.SQLiteDatabase | null = null;
-
-  private async getDb(): Promise<SQLite.SQLiteDatabase> {
-    if (!this.db) {
-      this.db = await SQLite.openDatabaseAsync(DB_NAME);
-      await this.db.execAsync(`
-        CREATE TABLE IF NOT EXISTS deliveries_cache (
-          id INTEGER PRIMARY KEY,
-          payload TEXT NOT NULL,
-          updated_at INTEGER NOT NULL
-        );
-      `);
-    }
-    return this.db;
+  private async getDb() {
+    return getCacheDatabase();
   }
 
   async upsertMany(deliveries: DeliveryApi[]): Promise<void> {
@@ -79,14 +65,10 @@ export class DeliveryCacheService {
     const db = await this.getDb();
     await db.runAsync('DELETE FROM deliveries_cache');
   }
-
-  _resetForTests(): void {
-    this.db = null;
-  }
 }
 
 export const deliveryCache = new DeliveryCacheService();
 
 export function _resetDeliveryCacheForTests(): void {
-  deliveryCache._resetForTests();
+  resetCacheDatabaseForTests();
 }

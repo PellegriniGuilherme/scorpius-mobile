@@ -152,6 +152,21 @@ export class SyncWorker {
   }
 
   /**
+   * Processa items prontos até esvaziar a fila ou atingir o limite.
+   */
+  async drain(maxItems = 50): Promise<number> {
+    let processed = 0;
+    for (let index = 0; index < maxItems; index += 1) {
+      const didProcess = await this.tick();
+      if (!didProcess) {
+        break;
+      }
+      processed += 1;
+    }
+    return processed;
+  }
+
+  /**
    * Processa UM item. Público para testes e retry manual.
    * Retorna true se processou um item, false se nada a fazer.
    */

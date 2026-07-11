@@ -16,6 +16,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Text, View, ActivityIndicator, Modal, Pressable, ScrollView, Image } from 'react-native';
+import { LocalMediaPreview } from '@/components/LocalMediaPreview';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
@@ -347,18 +348,34 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
             <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, textTransform: 'uppercase' }}>
               Comprovante
             </Text>
-            <View style={{ marginTop: tokens.space[2], gap: tokens.space[1] }}>
+            <View style={{ marginTop: tokens.space[3], gap: tokens.space[4] }}>
               {requiresPhoto ? (
-                <Text style={{ color: colors.textPrimary, fontSize: tokens.text.sm }}>
-                  {hasPhoto ? '✓ Foto capturada' : '✗ Foto pendente'}
-                </Text>
+                <LocalMediaPreview
+                  uri={photoPath}
+                  label={ptBR.proof.photoLabel}
+                  emptyLabel={ptBR.proof.waitingPhoto}
+                  capturedLabel={ptBR.proof.photoCaptured}
+                  height={220}
+                  testID="proof-confirm-photo-preview"
+                  accessibilityLabel="Pré-visualização da foto do pacote"
+                />
               ) : null}
               {requiresSignature ? (
-                <Text style={{ color: colors.textPrimary, fontSize: tokens.text.sm }}>
-                  {hasSignature && signatureName.trim().length >= 3
-                    ? `✓ Assinatura de ${signatureName.trim()}`
-                    : '✗ Assinatura pendente'}
-                </Text>
+                <View style={{ gap: tokens.space[2] }}>
+                  <LocalMediaPreview
+                    uri={signaturePath}
+                    label={ptBR.proof.signatureAreaLabel}
+                    emptyLabel={ptBR.proof.missingSignature}
+                    height={140}
+                    testID="proof-confirm-signature-preview"
+                    accessibilityLabel="Pré-visualização da assinatura"
+                  />
+                  {signatureName.trim().length >= 3 ? (
+                    <Text style={{ color: colors.textPrimary, fontSize: tokens.text.sm }}>
+                      {ptBR.proof.signatureOf.replace('{name}', signatureName.trim())}
+                    </Text>
+                  ) : null}
+                </View>
               ) : null}
             </View>
           </Card>

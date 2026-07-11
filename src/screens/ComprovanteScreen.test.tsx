@@ -145,6 +145,22 @@ describe('ComprovanteScreen', () => {
     expect(screen.queryByText('Área de assinatura')).toBeNull();
   });
 
+  it('confirm phase shows photo and signature previews', async () => {
+    await setupHappyPathPickPhoto();
+    setRouteParams({ deliveryId: 1001 });
+    renderWithTheme(<ComprovanteScreen />);
+    fireEvent.press(await screen.findByText('Capturar foto'));
+    fireEvent.press(screen.getByTestId('mock-sign'));
+    await waitFor(() => expect(screen.getByText('Tirar novamente')).toBeTruthy());
+    const input = screen.getByLabelText('Nome do destinatário');
+    fireEvent.changeText(input, 'João da Silva');
+    fireEvent.press(screen.getByRole('button', { name: 'Revisar finalização' }));
+    await waitFor(() => expect(screen.getByText('Confirmar entrega')).toBeTruthy());
+    expect(screen.getByTestId('proof-confirm-photo-preview')).toBeTruthy();
+    expect(screen.getByTestId('proof-confirm-signature-preview')).toBeTruthy();
+    expect(screen.getByText('Assinatura de João da Silva')).toBeTruthy();
+  });
+
   it('submit enqueues to outbox and shows success screen', async () => {
     await setupHappyPathPickPhoto();
     syncWorker.setApiClient({ uploadProof: successfulUpload });

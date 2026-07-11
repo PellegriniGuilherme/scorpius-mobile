@@ -1,8 +1,6 @@
-import * as SQLite from 'expo-sqlite';
+import { getCacheDatabase } from '@/services/sqlite/cacheDatabase';
 import type { DrivingRoute } from '@/lib/googleDirections';
 import type { LatLng } from '@/lib/googleDirections';
-
-const DB_NAME = 'scorpius-move-cache.db';
 
 function roundCoord(value: number): string {
   return value.toFixed(4);
@@ -13,20 +11,8 @@ export function buildRouteCacheKey(origin: LatLng, destination: LatLng): string 
 }
 
 export class RouteCacheService {
-  private db: SQLite.SQLiteDatabase | null = null;
-
-  private async getDb(): Promise<SQLite.SQLiteDatabase> {
-    if (!this.db) {
-      this.db = await SQLite.openDatabaseAsync(DB_NAME);
-      await this.db.execAsync(`
-        CREATE TABLE IF NOT EXISTS driving_routes_cache (
-          cache_key TEXT PRIMARY KEY,
-          payload TEXT NOT NULL,
-          updated_at INTEGER NOT NULL
-        );
-      `);
-    }
-    return this.db;
+  private async getDb() {
+    return getCacheDatabase();
   }
 
   async get(cacheKey: string): Promise<DrivingRoute | null> {

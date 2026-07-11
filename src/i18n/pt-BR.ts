@@ -191,6 +191,8 @@ export const ptBR = {
     back: 'Voltar e revisar',
     missingPhoto: 'Capture a foto do pacote para continuar.',
     missingSignature: 'Colete a assinatura e informe o nome do destinatário (mín. 3 caracteres).',
+    photoCaptured: 'Foto capturada',
+    signatureOf: 'Assinatura de {name}',
     photoLabel: 'Foto do pacote',
     signatureLabel: 'Nome do destinatário',
     signatureAreaLabel: 'Área de assinatura',

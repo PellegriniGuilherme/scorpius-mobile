@@ -1,24 +1,11 @@
-import * as SQLite from 'expo-sqlite';
+import { getCacheDatabase } from '@/services/sqlite/cacheDatabase';
 import type { DriverOccurrenceType } from '@/api/occurrenceTypes';
 
-const DB_NAME = 'scorpius-move-cache.db';
 const CACHE_ROW_ID = 1;
 
 export class OccurrenceTypeCacheService {
-  private db: SQLite.SQLiteDatabase | null = null;
-
-  private async getDb(): Promise<SQLite.SQLiteDatabase> {
-    if (!this.db) {
-      this.db = await SQLite.openDatabaseAsync(DB_NAME);
-      await this.db.execAsync(`
-        CREATE TABLE IF NOT EXISTS occurrence_types_cache (
-          id INTEGER PRIMARY KEY CHECK (id = 1),
-          payload TEXT NOT NULL,
-          updated_at INTEGER NOT NULL
-        );
-      `);
-    }
-    return this.db;
+  private async getDb() {
+    return getCacheDatabase();
   }
 
   async save(types: DriverOccurrenceType[]): Promise<void> {

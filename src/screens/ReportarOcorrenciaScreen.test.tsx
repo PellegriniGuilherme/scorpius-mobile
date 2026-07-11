@@ -102,10 +102,11 @@ describe('ReportarOcorrenciaScreen', () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<ReportarOcorrenciaScreen />);
     fireEvent.press(await screen.findByTestId('occurrence-capture-photo'));
-    await waitFor(() => expect(screen.getByText('Foto capturada')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('occurrence-photo-preview')).toBeTruthy());
 
     fireEvent.press(screen.getByTestId('occurrence-review'));
     await waitFor(() => expect(screen.getByText('Confirmar ocorrência')).toBeTruthy());
+    expect(screen.getByTestId('occurrence-photo-preview')).toBeTruthy();
     fireEvent.press(screen.getByTestId('occurrence-confirm-submit'));
 
     await waitFor(() => {

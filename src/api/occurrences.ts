@@ -11,6 +11,7 @@ export interface DriverOccurrenceTypeSummary {
 export interface DriverOccurrence {
   id: number;
   delivery_id: number | null;
+  client_local_id?: string | null;
   type?: DriverOccurrenceTypeSummary | null;
   description?: string | null;
   status: DriverOccurrenceStatus;

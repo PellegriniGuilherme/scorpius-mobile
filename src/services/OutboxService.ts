@@ -95,8 +95,13 @@ export class OutboxService {
    * operação. Safe para chamar múltiplas vezes — promises são cacheadas.
    */
   async init(): Promise<void> {
-    if (this.initPromise) return this.initPromise;
-    this.initPromise = this.doInit();
+    if (this.db) return;
+    if (!this.initPromise) {
+      this.initPromise = this.doInit().catch((error) => {
+        this.initPromise = null;
+        throw error;
+      });
+    }
     return this.initPromise;
   }
 
@@ -137,18 +142,15 @@ export class OutboxService {
     // T100: gera UUID v4 automaticamente. Pode ser override via options
     // (usado em testes para controle determinístico).
     const idempotencyKey = options?.idempotencyKey ?? generateUuid();
-    const stmt = await db.prepareAsync(
+    const result = await db.runAsync(
       `INSERT INTO outbox (type, payload, attempts, next_retry_at, last_error, idempotency_key, created_at, updated_at)
        VALUES (?, ?, 0, 0, NULL, ?, ?, ?)`,
-    );
-    const result = await stmt.executeAsync([
       type,
       JSON.stringify(payload),
       idempotencyKey,
       now,
       now,
-    ]);
-    await stmt.finalizeAsync();
+    );
     return result.lastInsertRowId;
   }
 
@@ -160,16 +162,18 @@ export class OutboxService {
     await this.init();
     const db = this.requireDb();
     const now = Date.now();
-    const stmt = await db.prepareAsync(
+    await db.runAsync(
       `UPDATE outbox
        SET attempts = attempts + 1,
            next_retry_at = ?,
            last_error = ?,
            updated_at = ?
        WHERE id = ?`,
+      nextRetryAt,
+      error,
+      now,
+      id,
     );
-    await stmt.executeAsync([nextRetryAt, error, now, id]);
-    await stmt.finalizeAsync();
   }
 
   /**
@@ -179,9 +183,7 @@ export class OutboxService {
   async markDone(id: number): Promise<void> {
     await this.init();
     const db = this.requireDb();
-    const stmt = await db.prepareAsync(`DELETE FROM outbox WHERE id = ?`);
-    await stmt.executeAsync([id]);
-    await stmt.finalizeAsync();
+    await db.runAsync('DELETE FROM outbox WHERE id = ?', id);
   }
 
   /**
@@ -192,18 +194,16 @@ export class OutboxService {
     await this.init();
     const db = this.requireDb();
     const now = Date.now();
-    const stmt = await db.prepareAsync(
+    const row = await db.getFirstAsync<OutboxRow>(
       `SELECT id, type, payload, attempts, next_retry_at, last_error, idempotency_key, created_at, updated_at
        FROM outbox
        WHERE next_retry_at <= ?
        ORDER BY created_at ASC
        LIMIT 1`,
+      now,
     );
-    const result = await stmt.executeAsync<OutboxRow>([now]);
-    const rows = await result.getAllAsync();
-    await stmt.finalizeAsync();
-    if (rows.length === 0) return null;
-    return rowToItem(rows[0]);
+    if (!row) return null;
+    return rowToItem(row);
   }
 
   /**
@@ -213,14 +213,11 @@ export class OutboxService {
   async getAll(): Promise<OutboxItem[]> {
     await this.init();
     const db = this.requireDb();
-    const stmt = await db.prepareAsync(
+    const rows = await db.getAllAsync<OutboxRow>(
       `SELECT id, type, payload, attempts, next_retry_at, last_error, idempotency_key, created_at, updated_at
        FROM outbox
        ORDER BY created_at DESC`,
     );
-    const result = await stmt.executeAsync<OutboxRow>([]);
-    const rows = await result.getAllAsync();
-    await stmt.finalizeAsync();
     return rows.map(rowToItem);
   }
 
@@ -230,11 +227,8 @@ export class OutboxService {
   async count(): Promise<number> {
     await this.init();
     const db = this.requireDb();
-    const stmt = await db.prepareAsync(`SELECT COUNT(*) as c FROM outbox`);
-    const result = await stmt.executeAsync<{ c: number }>([]);
-    const rows = await result.getAllAsync();
-    await stmt.finalizeAsync();
-    return rows[0]?.c ?? 0;
+    const row = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM outbox');
+    return row?.c ?? 0;
   }
 
   /**
@@ -246,15 +240,13 @@ export class OutboxService {
   async getDLQItems(): Promise<OutboxItem[]> {
     await this.init();
     const db = this.requireDb();
-    const stmt = await db.prepareAsync(
+    const rows = await db.getAllAsync<OutboxRow>(
       `SELECT id, type, payload, attempts, next_retry_at, last_error, idempotency_key, created_at, updated_at
        FROM outbox
        WHERE next_retry_at = 0 AND attempts >= ?
        ORDER BY created_at DESC`,
+      MAX_ATTEMPTS,
     );
-    const result = await stmt.executeAsync<OutboxRow>([MAX_ATTEMPTS]);
-    const rows = await result.getAllAsync();
-    await stmt.finalizeAsync();
     return rows.map(rowToItem);
   }
 
@@ -264,13 +256,11 @@ export class OutboxService {
   async getDLQCount(): Promise<number> {
     await this.init();
     const db = this.requireDb();
-    const stmt = await db.prepareAsync(
-      `SELECT COUNT(*) as c FROM outbox WHERE next_retry_at = 0 AND attempts >= ?`,
+    const row = await db.getFirstAsync<{ c: number }>(
+      'SELECT COUNT(*) as c FROM outbox WHERE next_retry_at = 0 AND attempts >= ?',
+      MAX_ATTEMPTS,
     );
-    const result = await stmt.executeAsync<{ c: number }>([MAX_ATTEMPTS]);
-    const rows = await result.getAllAsync();
-    await stmt.finalizeAsync();
-    return rows[0]?.c ?? 0;
+    return row?.c ?? 0;
   }
 
   /**
@@ -284,16 +274,17 @@ export class OutboxService {
     await this.init();
     const db = this.requireDb();
     const now = Date.now();
-    const stmt = await db.prepareAsync(
+    await db.runAsync(
       `UPDATE outbox
        SET attempts = 0,
            next_retry_at = 0,
            last_error = NULL,
            updated_at = ?
        WHERE id = ? AND attempts >= ?`,
+      now,
+      id,
+      MAX_ATTEMPTS,
     );
-    await stmt.executeAsync([now, id, MAX_ATTEMPTS]);
-    await stmt.finalizeAsync();
   }
 
   /**

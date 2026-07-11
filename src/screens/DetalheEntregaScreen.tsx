@@ -2,7 +2,8 @@ import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { fetchDeliveryOccurrences, type DriverOccurrence } from '@/api/occurrences';
+import { loadDeliveryOccurrencesView } from '@/services/occurrenceOutboxService';
+import type { DriverOccurrence } from '@/api/occurrences';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { AlertBanner } from '@/components/AlertBanner';
@@ -10,7 +11,6 @@ import { ActionChoiceCard } from '@/components/ActionChoiceCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import NetInfo from '@react-native-community/netinfo';
 import { fetchDeliveryWithCache } from '@/services/deliveryService';
-import { outbox } from '@/services/OutboxService';
 import { formatDeliveryWindowLabel, deliveryWindowEmptyLabel } from '@/lib/formatDeliveryWindow';
 import { formatBrazilPhone, extractBrazilPhoneDigits } from '@/lib/formatPhone';
 import { openRecipientPhone, openRecipientWhatsApp, recipientPhoneDigits } from '@/lib/contactRecipient';
@@ -57,29 +57,8 @@ export function DetalheEntregaScreen() {
   const loadOccurrences = useCallback(async (deliveryId: number) => {
     setOccurrencesLoading(true);
     try {
-      const [remote, outboxItems] = await Promise.all([
-        fetchDeliveryOccurrences(deliveryId).catch(() => ({ data: [] as DriverOccurrence[] })),
-        outbox.getAll(),
-      ]);
-      setOccurrences(remote.data ?? []);
-
-      const pending = outboxItems
-        .filter((item) => item.type === 'occurrence_report')
-        .flatMap((item) => {
-          const occ = item.payload.occurrence as
-            | { local_id?: string; delivery_id?: number; type?: string; notes?: string }
-            | undefined;
-          if (!occ || occ.delivery_id !== deliveryId) return [];
-          return [
-            {
-              localId: occ.local_id ?? String(item.id),
-              typeSlug: occ.type ?? '—',
-              notes: occ.notes,
-              status: item.attempts >= 5 || item.last_error ? ('failed' as const) : ('pending' as const),
-            },
-          ];
-        });
-
+      const { remote, pending } = await loadDeliveryOccurrencesView(deliveryId);
+      setOccurrences(remote);
       setPendingOccurrences(pending);
     } finally {
       setOccurrencesLoading(false);

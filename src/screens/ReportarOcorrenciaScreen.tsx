@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Text, View, ActivityIndicator } from 'react-native';
+import { LocalMediaPreview } from '@/components/LocalMediaPreview';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
@@ -113,7 +114,7 @@ export function ReportarOcorrenciaScreen() {
           occurred_at: occurredAt,
         },
       });
-      await syncWorker.tick();
+      await syncWorker.drain();
       setPhase('success');
     } finally {
       setSubmitting(false);
@@ -248,9 +249,15 @@ export function ReportarOcorrenciaScreen() {
             </>
           ) : null}
           {requiresPhoto ? (
-            <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm, marginTop: tokens.space[3] }}>
-              {hasPhoto ? '✓ Foto anexada' : '✗ Foto pendente'}
-            </Text>
+            <LocalMediaPreview
+              uri={photoPath}
+              label={ptBR.occurrence.photoLabel}
+              emptyLabel={ptBR.occurrence.photoRequired}
+              capturedLabel={ptBR.occurrence.photoCaptured}
+              testID="occurrence-photo-preview"
+              accessibilityLabel="Pré-visualização da foto da ocorrência"
+              style={{ marginTop: tokens.space[4] }}
+            />
           ) : null}
         </Card>
       </KeyboardFormScreen>
@@ -307,46 +314,14 @@ export function ReportarOcorrenciaScreen() {
         <>
           <AlertBanner tone="warning" message={ptBR.occurrence.photoTypeWarning} testID="occurrence-photo-warning" />
           <Card>
-            <Text
-              style={{
-                fontSize: tokens.text.xs,
-                color: colors.textMuted,
-                fontWeight: tokens.weight.medium,
-                textTransform: 'uppercase',
-              }}
-            >
-              {ptBR.occurrence.photoLabel}
-            </Text>
-            <View
-              style={{
-                marginTop: tokens.space[3],
-                height: 180,
-                backgroundColor: hasPhoto ? colors.statusSuccessSurface : colors.surfaceInset,
-                borderColor: hasPhoto ? colors.statusSuccessBorder : colors.borderDefault,
-                borderWidth: 2,
-                borderRadius: tokens.radius.md,
-                borderStyle: hasPhoto ? 'solid' : 'dashed',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: tokens.space[2],
-              }}
-            >
-              {hasPhoto ? (
-                <>
-                  <Text style={{ fontSize: 48, color: colors.statusSuccessMarker }}>📷</Text>
-                  <Text style={{ color: colors.statusSuccessText, fontWeight: tokens.weight.semibold }}>
-                    {ptBR.occurrence.photoCaptured}
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <Text style={{ fontSize: 48, color: colors.textSubtle }}>📷</Text>
-                  <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm }}>
-                    {ptBR.occurrence.photoRequired}
-                  </Text>
-                </>
-              )}
-            </View>
+            <LocalMediaPreview
+              uri={photoPath}
+              label={ptBR.occurrence.photoLabel}
+              emptyLabel={ptBR.occurrence.photoRequired}
+              capturedLabel={ptBR.occurrence.photoCaptured}
+              testID="occurrence-photo-preview"
+              accessibilityLabel="Pré-visualização da foto da ocorrência"
+            />
             <View style={{ marginTop: tokens.space[3] }}>
               <Button
                 label={

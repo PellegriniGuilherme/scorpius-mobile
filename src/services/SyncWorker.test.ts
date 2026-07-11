@@ -75,6 +75,19 @@ describe('SyncWorker', () => {
     expect(result).toBe(false);
   });
 
+  it('drain() processes all ready items until queue is empty', async () => {
+    await outbox.enqueue('delivery_action', { deliveryId: 1001, action: 'start' });
+    await outbox.enqueue('delivery_action', { deliveryId: 1002, action: 'start' });
+    const executeDeliveryAction = jest.fn().mockResolvedValue(undefined);
+    worker.setApiClient({ uploadProof: jest.fn(), executeDeliveryAction });
+
+    const processed = await worker.drain();
+
+    expect(processed).toBe(2);
+    expect(executeDeliveryAction).toHaveBeenCalledTimes(2);
+    expect(await outbox.count()).toBe(0);
+  });
+
   it('tick() processes item with success → markDone', async () => {
     const id = await outbox.enqueue('proof_upload', { deliveryId: 1001, photoPath: '/a.jpg', signatureName: 'João' });
     const api: ApiClient = { uploadProof: jest.fn().mockResolvedValue(undefined) };
