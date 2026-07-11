@@ -7,6 +7,27 @@ export interface OccurrenceTypesResult {
   fromCache: boolean;
 }
 
+export type OccurrenceTypeNameMap = Readonly<Record<string, string>>;
+
+export function buildOccurrenceTypeNameMap(types: DriverOccurrenceType[]): OccurrenceTypeNameMap {
+  return Object.fromEntries(types.map((type) => [type.slug, type.name]));
+}
+
+export function resolveOccurrenceTypeName(
+  slug: string | null | undefined,
+  nameMap: OccurrenceTypeNameMap,
+  fallback = 'Ocorrência',
+): string {
+  const key = slug?.trim();
+  if (!key) return fallback;
+  return nameMap[key] ?? key;
+}
+
+export async function fetchOccurrenceTypeNameMap(activeOnly = true): Promise<OccurrenceTypeNameMap> {
+  const { data } = await fetchOccurrenceTypesWithCache(activeOnly);
+  return buildOccurrenceTypeNameMap(data);
+}
+
 /**
  * Busca tipos de ocorrência com cache SQLite.
  * Online: atualiza cache e retorna dados frescos.

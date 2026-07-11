@@ -3,6 +3,10 @@ import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { loadDeliveryOccurrencesView } from '@/services/occurrenceOutboxService';
+import {
+  resolveOccurrenceTypeName,
+  type OccurrenceTypeNameMap,
+} from '@/services/occurrenceTypeService';
 import type { DriverOccurrence } from '@/api/occurrences';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -28,8 +32,13 @@ type Route_ = RouteProp<AppStackParamList, 'DetalheEntrega'>;
 interface PendingOccurrenceRow {
   localId: string;
   typeSlug: string;
+  typeName: string;
   notes?: string;
   status: 'pending' | 'failed';
+}
+
+function remoteOccurrenceLabel(occ: DriverOccurrence, typeNameMap: OccurrenceTypeNameMap): string {
+  return occ.type?.name ?? resolveOccurrenceTypeName(occ.type?.slug, typeNameMap);
 }
 
 function statusLabel(s: DeliveryUiStatus): string {
@@ -52,14 +61,16 @@ export function DetalheEntregaScreen() {
   const [pendingSync, setPendingSync] = useState(false);
   const [occurrences, setOccurrences] = useState<DriverOccurrence[]>([]);
   const [pendingOccurrences, setPendingOccurrences] = useState<PendingOccurrenceRow[]>([]);
+  const [occurrenceTypeNames, setOccurrenceTypeNames] = useState<OccurrenceTypeNameMap>({});
   const [occurrencesLoading, setOccurrencesLoading] = useState(false);
 
   const loadOccurrences = useCallback(async (deliveryId: number) => {
     setOccurrencesLoading(true);
     try {
-      const { remote, pending } = await loadDeliveryOccurrencesView(deliveryId);
+      const { remote, pending, typeNameMap } = await loadDeliveryOccurrencesView(deliveryId);
       setOccurrences(remote);
       setPendingOccurrences(pending);
+      setOccurrenceTypeNames(typeNameMap);
     } finally {
       setOccurrencesLoading(false);
     }
@@ -266,7 +277,7 @@ export function DetalheEntregaScreen() {
             {occurrences.map((occ) => (
               <View key={`sync-${occ.id}`} style={{ gap: tokens.space[1] }}>
                 <Text style={{ color: colors.textPrimary, fontWeight: tokens.weight.semibold, fontSize: tokens.text.sm }}>
-                  {occ.type?.name ?? occ.type?.slug ?? 'Ocorrência'}
+                  {remoteOccurrenceLabel(occ, occurrenceTypeNames)}
                 </Text>
                 {occ.description ? (
                   <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>{occ.description}</Text>
@@ -281,7 +292,7 @@ export function DetalheEntregaScreen() {
             {pendingOccurrences.map((occ) => (
               <View key={`pending-${occ.localId}`} style={{ gap: tokens.space[1] }}>
                 <Text style={{ color: colors.textPrimary, fontWeight: tokens.weight.semibold, fontSize: tokens.text.sm }}>
-                  {occ.typeSlug}
+                  {occ.typeName}
                 </Text>
                 {occ.notes ? (
                   <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>{occ.notes}</Text>

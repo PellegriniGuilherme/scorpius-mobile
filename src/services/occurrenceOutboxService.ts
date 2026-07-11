@@ -1,10 +1,16 @@
 import { fetchDeliveryOccurrences, type DriverOccurrence } from '@/api/occurrences';
 import { outbox, type OutboxItem } from '@/services/OutboxService';
+import {
+  fetchOccurrenceTypeNameMap,
+  resolveOccurrenceTypeName,
+  type OccurrenceTypeNameMap,
+} from '@/services/occurrenceTypeService';
 import { syncWorker, type OccurrenceOutboxPayload } from '@/services/SyncWorker';
 
 export interface PendingOccurrenceRow {
   localId: string;
   typeSlug: string;
+  typeName: string;
   notes?: string;
   status: 'pending' | 'failed';
 }
@@ -72,8 +78,11 @@ export async function reconcileSyncedOccurrenceOutbox(
 export async function loadDeliveryOccurrencesView(deliveryId: number): Promise<{
   remote: DriverOccurrence[];
   pending: PendingOccurrenceRow[];
+  typeNameMap: OccurrenceTypeNameMap;
 }> {
   await syncWorker.drain();
+
+  const typeNameMap = await fetchOccurrenceTypeNameMap(true);
 
   const remoteResponse = await fetchDeliveryOccurrences(deliveryId).catch(() => ({
     data: [] as DriverOccurrence[],
@@ -91,10 +100,13 @@ export async function loadDeliveryOccurrencesView(deliveryId: number): Promise<{
         return [];
       }
 
+      const typeSlug = occurrence.type ?? '—';
+
       return [
         {
           localId: occurrence.local_id ?? String(item.id),
-          typeSlug: occurrence.type ?? '—',
+          typeSlug,
+          typeName: resolveOccurrenceTypeName(typeSlug === '—' ? null : typeSlug, typeNameMap),
           notes: occurrence.notes,
           status:
             item.attempts >= 5 || item.last_error ? ('failed' as const) : ('pending' as const),
@@ -102,5 +114,5 @@ export async function loadDeliveryOccurrencesView(deliveryId: number): Promise<{
       ];
     });
 
-  return { remote, pending };
+  return { remote, pending, typeNameMap };
 }

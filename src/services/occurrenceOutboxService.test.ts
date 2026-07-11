@@ -10,6 +10,17 @@ jest.mock('@/api/occurrences', () => ({
   fetchDeliveryOccurrences: jest.fn(),
 }));
 
+jest.mock('@/services/occurrenceTypeService', () => {
+  const actual = jest.requireActual('@/services/occurrenceTypeService');
+  return {
+    ...actual,
+    fetchOccurrenceTypeNameMap: jest.fn().mockResolvedValue({
+      delay: 'Atraso',
+      accident: 'Acidente',
+    }),
+  };
+});
+
 jest.mock('@/services/SyncWorker', () => ({
   syncWorker: {
     drain: jest.fn().mockResolvedValue(1),
@@ -76,5 +87,36 @@ describe('occurrenceOutboxService', () => {
     expect(syncWorker.drain).toHaveBeenCalled();
     expect(result.remote).toHaveLength(1);
     expect(result.pending).toHaveLength(0);
+    expect(result.typeNameMap.delay).toBe('Atraso');
+  });
+
+  it('resolves pending occurrence type slug to localized name', async () => {
+    jest.spyOn(outbox, 'getAll').mockResolvedValue([
+      {
+        id: 10,
+        type: 'occurrence_report',
+        payload: {
+          occurrence: {
+            local_id: 'local-2',
+            delivery_id: 1001,
+            type: 'delay',
+            occurred_at: '2026-06-21T10:00:00-03:00',
+          },
+        },
+        attempts: 0,
+        next_retry_at: 0,
+        last_error: null,
+        created_at: 1,
+        updated_at: 1,
+        idempotency_key: 'key-2',
+      },
+    ]);
+    (fetchDeliveryOccurrences as jest.Mock).mockResolvedValue({ data: [] });
+
+    const result = await loadDeliveryOccurrencesView(1001);
+
+    expect(result.pending).toHaveLength(1);
+    expect(result.pending[0]?.typeSlug).toBe('delay');
+    expect(result.pending[0]?.typeName).toBe('Atraso');
   });
 });
