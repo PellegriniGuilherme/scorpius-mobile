@@ -120,7 +120,10 @@ describe('ReportarOcorrenciaScreen', () => {
         }),
       );
     });
-    expect(goBack).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByText('Ocorrência enviada com sucesso.')).toBeTruthy();
+    });
+    expect(goBack).not.toHaveBeenCalled();
   });
 
   it('allows submit without photo when type does not require it', async () => {

@@ -19,7 +19,7 @@ import { ptBR } from '@/i18n/pt-BR';
 import type { AppStackParamList } from '@/navigation/types';
 
 type Route_ = RouteProp<AppStackParamList, 'ReportarOcorrencia'>;
-type OccurrencePhase = 'form' | 'confirm';
+type OccurrencePhase = 'form' | 'confirm' | 'success';
 
 export function ReportarOcorrenciaScreen() {
   const route = useRoute<Route_>();
@@ -114,10 +114,20 @@ export function ReportarOcorrenciaScreen() {
         },
       });
       await syncWorker.tick();
-      navigation.goBack();
+      setPhase('success');
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleReportAnother() {
+    setNotes('');
+    setPhotoPath(null);
+    setPhase('form');
+  }
+
+  function handleBackToDelivery() {
+    navigation.goBack();
   }
 
   if (loading) {
@@ -135,6 +145,33 @@ export function ReportarOcorrenciaScreen() {
           {loadError ? ptBR.occurrence.loadError : ptBR.occurrence.emptyTypes}
         </Text>
       </View>
+    );
+  }
+
+  if (phase === 'success') {
+    return (
+      <KeyboardFormScreen
+        contentContainerStyle={{ gap: tokens.space[4] }}
+        footer={
+          <View style={{ gap: tokens.space[3] }}>
+            <Button
+              testID="occurrence-report-another"
+              label={ptBR.occurrence.reportAnother}
+              onPress={handleReportAnother}
+              fullWidth
+            />
+            <Button
+              testID="occurrence-back-delivery"
+              label={ptBR.occurrence.backToDelivery}
+              variant="ghost"
+              onPress={handleBackToDelivery}
+              fullWidth
+            />
+          </View>
+        }
+      >
+        <AlertBanner tone="success" title={ptBR.occurrence.submitSuccess} message=" " />
+      </KeyboardFormScreen>
     );
   }
 

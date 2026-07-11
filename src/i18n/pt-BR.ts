@@ -98,6 +98,10 @@ export const ptBR = {
       failTitle: 'Não consegui entregar',
       failSubtitle: 'Encerra esta tentativa. Você não poderá finalizar com comprovante.',
     },
+    occurrencesSection: 'Ocorrências reportadas',
+    occurrencesEmpty: 'Nenhuma ocorrência registrada para esta entrega.',
+    occurrencePending: 'Pendente de sincronização',
+    occurrenceFailed: 'Falha no envio',
   },
   failDelivery: {
     title: 'Marcar falha',
@@ -162,6 +166,9 @@ export const ptBR = {
     loadError: 'Não foi possível carregar os tipos de ocorrência.',
     emptyTypes: 'Nenhum tipo de ocorrência disponível.',
     offlineTypes: 'Tipos salvos offline — conecte-se para atualizar.',
+    submitSuccess: 'Ocorrência enviada com sucesso.',
+    reportAnother: 'Reportar outra ocorrência',
+    backToDelivery: 'Voltar à entrega',
   },
   proof: {
     title: 'Finalizar entrega',

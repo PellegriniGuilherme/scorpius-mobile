@@ -26,7 +26,14 @@ class TelemetryService {
     if (this.buffer.length === 0) return;
     const batch = this.buffer.splice(0, this.buffer.length);
     try {
-      await uploadTelemetry({ points: batch });
+      await uploadTelemetry({
+        points: batch.map((point) => ({
+          lat: point.lat,
+          lng: point.lng,
+          ts: Date.parse(point.recorded_at),
+          delivery_id: point.delivery_id,
+        })),
+      });
     } catch {
       this.buffer.unshift(...batch);
     }

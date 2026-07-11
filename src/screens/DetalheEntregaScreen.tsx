@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { fetchDeliveryOccurrences, type DriverOccurrence } from '@/api/occurrences';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { AlertBanner } from '@/components/AlertBanner';
@@ -9,6 +10,7 @@ import { ActionChoiceCard } from '@/components/ActionChoiceCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import NetInfo from '@react-native-community/netinfo';
 import { fetchDeliveryWithCache } from '@/services/deliveryService';
+import { outbox } from '@/services/OutboxService';
 import { formatDeliveryWindowLabel, deliveryWindowEmptyLabel } from '@/lib/formatDeliveryWindow';
 import { mapDelivery, nextFsmAction } from '@/lib/mapDelivery';
 import { runDeliveryAction } from '@/services/deliveryActions';
@@ -20,6 +22,13 @@ import type { AppStackParamList } from '@/navigation/types';
 
 type Nav = NativeStackNavigationProp<AppStackParamList, 'DetalheEntrega'>;
 type Route_ = RouteProp<AppStackParamList, 'DetalheEntrega'>;
+
+interface PendingOccurrenceRow {
+  localId: string;
+  typeSlug: string;
+  notes?: string;
+  status: 'pending' | 'failed';
+}
 
 function statusLabel(s: DeliveryUiStatus): string {
   return {
@@ -38,16 +47,54 @@ export function DetalheEntregaScreen() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [pendingSync, setPendingSync] = useState(false);
+  const [occurrences, setOccurrences] = useState<DriverOccurrence[]>([]);
+  const [pendingOccurrences, setPendingOccurrences] = useState<PendingOccurrenceRow[]>([]);
+  const [occurrencesLoading, setOccurrencesLoading] = useState(false);
+
+  const loadOccurrences = useCallback(async (deliveryId: number) => {
+    setOccurrencesLoading(true);
+    try {
+      const [remote, outboxItems] = await Promise.all([
+        fetchDeliveryOccurrences(deliveryId).catch(() => ({ data: [] as DriverOccurrence[] })),
+        outbox.getAll(),
+      ]);
+      setOccurrences(remote.data ?? []);
+
+      const pending = outboxItems
+        .filter((item) => item.type === 'occurrence_report')
+        .flatMap((item) => {
+          const occ = item.payload.occurrence as
+            | { local_id?: string; delivery_id?: number; type?: string; notes?: string }
+            | undefined;
+          if (!occ || occ.delivery_id !== deliveryId) return [];
+          return [
+            {
+              localId: occ.local_id ?? String(item.id),
+              typeSlug: occ.type ?? '—',
+              notes: occ.notes,
+              status: item.attempts >= 5 || item.last_error ? ('failed' as const) : ('pending' as const),
+            },
+          ];
+        });
+
+      setPendingOccurrences(pending);
+    } finally {
+      setOccurrencesLoading(false);
+    }
+  }, []);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const res = await fetchDeliveryWithCache(route.params.deliveryId);
       setDelivery(res.data ? mapDelivery(res.data) : null);
+      if (res.data) {
+        await loadOccurrences(route.params.deliveryId);
+      }
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [route.params.deliveryId]);
+  }, [route.params.deliveryId, loadOccurrences]);
 
   const hasLoadedOnce = useRef(false);
 
@@ -195,6 +242,57 @@ export function DetalheEntregaScreen() {
           </Text>
         </Card>
       ) : null}
+
+      <Card>
+        <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, textTransform: 'uppercase' }}>
+          {ptBR.detail.occurrencesSection}
+        </Text>
+        {occurrencesLoading ? (
+          <ActivityIndicator color={colors.accent} style={{ marginTop: tokens.space[3] }} />
+        ) : occurrences.length === 0 && pendingOccurrences.length === 0 ? (
+          <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm, marginTop: tokens.space[2] }}>
+            {ptBR.detail.occurrencesEmpty}
+          </Text>
+        ) : (
+          <View style={{ marginTop: tokens.space[2], gap: tokens.space[2] }}>
+            {occurrences.map((occ) => (
+              <View key={`sync-${occ.id}`} style={{ gap: tokens.space[1] }}>
+                <Text style={{ color: colors.textPrimary, fontWeight: tokens.weight.semibold, fontSize: tokens.text.sm }}>
+                  {occ.type?.name ?? occ.type?.slug ?? 'Ocorrência'}
+                </Text>
+                {occ.description ? (
+                  <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>{occ.description}</Text>
+                ) : null}
+                <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs }}>
+                  {occ.occurred_at
+                    ? new Date(occ.occurred_at).toLocaleString('pt-BR')
+                    : new Date(occ.created_at).toLocaleString('pt-BR')}
+                </Text>
+              </View>
+            ))}
+            {pendingOccurrences.map((occ) => (
+              <View key={`pending-${occ.localId}`} style={{ gap: tokens.space[1] }}>
+                <Text style={{ color: colors.textPrimary, fontWeight: tokens.weight.semibold, fontSize: tokens.text.sm }}>
+                  {occ.typeSlug}
+                </Text>
+                {occ.notes ? (
+                  <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>{occ.notes}</Text>
+                ) : null}
+                <Text
+                  style={{
+                    color: occ.status === 'failed' ? colors.statusDangerText : colors.statusWarningText,
+                    fontSize: tokens.text.xs,
+                  }}
+                >
+                  {occ.status === 'failed'
+                    ? ptBR.detail.occurrenceFailed
+                    : ptBR.detail.occurrencePending}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </Card>
 
       <View style={{ gap: tokens.space[3] }}>
         {fsmAction === 'proof' && (
