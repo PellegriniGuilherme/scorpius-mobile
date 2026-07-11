@@ -10,6 +10,7 @@
  *  - botão "Finalizar entrega" some quando status = 'delivered'
  */
 import { renderWithTheme, fireEvent, screen, waitFor } from '@/../jest.test-utils';
+import { Linking } from 'react-native';
 import { DetalheEntregaScreen } from './DetalheEntregaScreen';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
@@ -23,6 +24,8 @@ jest.mock('@react-navigation/native', () => {
 });
 
 const mockNavigate = jest.fn();
+const openURLSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+
 (useNavigation as jest.Mock).mockReturnValue({
   navigate: mockNavigate,
   goBack: jest.fn(),
@@ -40,13 +43,15 @@ function setRouteParams(params: { deliveryId: number } | undefined) {
 describe('DetalheEntregaScreen', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
+    openURLSpy.mockClear();
+    (Linking.canOpenURL as jest.Mock) = jest.fn().mockResolvedValue(true);
   });
 
   it('renders delivery details when deliveryId is valid', async () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<DetalheEntregaScreen />);
     expect(await screen.findByText('Mercado Central Ltda')).toBeTruthy();
-    expect(screen.getByText('+551133334444')).toBeTruthy();
+    expect(screen.getByText(/\+55 \(11\)/)).toBeTruthy();
     expect(screen.getByText('Av. Paulista, 1500')).toBeTruthy();
   });
 
@@ -90,6 +95,18 @@ describe('DetalheEntregaScreen', () => {
     await screen.findByText('Algo deu errado?');
     fireEvent.press(screen.getByTestId('detail-occurrence-choice'));
     expect(mockNavigate).toHaveBeenCalledWith('ReportarOcorrencia', { deliveryId: 1002 });
+  });
+
+  it('opens phone dialer and whatsapp from customer actions', async () => {
+    setRouteParams({ deliveryId: 1001 });
+    renderWithTheme(<DetalheEntregaScreen />);
+    await screen.findByText('Mercado Central Ltda');
+
+    fireEvent.press(screen.getByTestId('detail-call-phone'));
+    expect(openURLSpy).toHaveBeenCalledWith('tel:+551133334444');
+
+    fireEvent.press(screen.getByTestId('detail-call-whatsapp'));
+    expect(openURLSpy).toHaveBeenCalledWith('whatsapp://send?phone=551133334444');
   });
 
   it('hides "Finalizar entrega" button when status is delivered', async () => {

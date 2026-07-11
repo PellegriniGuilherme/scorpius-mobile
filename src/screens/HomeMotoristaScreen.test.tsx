@@ -30,6 +30,14 @@ const DRIVER = {
   company_id: 1,
 };
 
+function mockDeliveriesPage(data = MOCK_DELIVERY_API, page = 1, lastPage = 1) {
+  (deliveryService.fetchDeliveriesPage as jest.Mock).mockResolvedValue({
+    data,
+    meta: { current_page: page, last_page: lastPage, per_page: 20, total: data.length },
+    fromCache: false,
+  });
+}
+
 describe('HomeMotoristaScreen', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
@@ -40,19 +48,17 @@ describe('HomeMotoristaScreen', () => {
       isLoading: false,
       error: null,
     });
-    (deliveryService.fetchDeliveriesWithCache as jest.Mock).mockImplementation(() =>
-      Promise.resolve({ data: MOCK_DELIVERY_API, fromCache: false }),
-    );
+    mockDeliveriesPage();
     (deliveryService.readDeliveriesFromCache as jest.Mock).mockImplementation(() =>
       Promise.resolve(MOCK_DELIVERY_API),
     );
   });
 
-  it('renders 3 mock deliveries for driver 91', async () => {
+  it('renders active mock deliveries with default filter', async () => {
     renderWithTheme(<HomeMotoristaScreen />);
     expect(await screen.findByText('Mercado Central Ltda')).toBeTruthy();
     expect(screen.getByText('Farmácia Paulista')).toBeTruthy();
-    expect(screen.getByText('Hospital Norte')).toBeTruthy();
+    expect(screen.queryByText('Hospital Norte')).toBeNull();
   });
 
   it('navigates to DetalheEntrega when a card is pressed', async () => {
@@ -73,14 +79,12 @@ describe('HomeMotoristaScreen', () => {
     await screen.findByText('Mercado Central Ltda');
 
     fireEvent.press(screen.getByTestId('home-filter-trigger'));
+    fireEvent.press(screen.getByTestId('home-filter-option-picked_up'));
     fireEvent.press(screen.getByTestId('home-filter-option-in_route'));
-    fireEvent.press(screen.getByTestId('home-filter-option-delivered'));
-    fireEvent.press(screen.getByTestId('home-filter-option-failed'));
     fireEvent.press(screen.getByTestId('home-filter-apply'));
 
     expect(screen.getByText('Mercado Central Ltda')).toBeTruthy();
     expect(screen.queryByText('Farmácia Paulista')).toBeNull();
-    expect(screen.queryByText('Hospital Norte')).toBeNull();
   });
 
   it('allows selecting multiple statuses such as pending and in route', async () => {
@@ -98,7 +102,7 @@ describe('HomeMotoristaScreen', () => {
   });
 
   it('shows empty state when no deliveries match filter', async () => {
-    (deliveryService.fetchDeliveriesWithCache as jest.Mock).mockResolvedValueOnce({ data: [], fromCache: false });
+    mockDeliveriesPage([]);
     (deliveryService.readDeliveriesFromCache as jest.Mock).mockResolvedValueOnce([]);
     renderWithTheme(<HomeMotoristaScreen />);
     await waitFor(() => {
@@ -121,7 +125,7 @@ describe('HomeMotoristaScreen', () => {
     });
   });
 
-  it('calls fetchDeliveriesWithCache with forceNetwork on pull-to-refresh', async () => {
+  it('calls fetchDeliveriesPage with forceNetwork on pull-to-refresh', async () => {
     renderWithTheme(<HomeMotoristaScreen />);
     await screen.findByText('Mercado Central Ltda');
 
@@ -133,7 +137,7 @@ describe('HomeMotoristaScreen', () => {
     });
 
     await waitFor(() => {
-      expect(deliveryService.fetchDeliveriesWithCache).toHaveBeenCalledWith({ forceNetwork: true });
+      expect(deliveryService.fetchDeliveriesPage).toHaveBeenCalledWith(1, { forceNetwork: true });
     });
   });
 
@@ -141,7 +145,22 @@ describe('HomeMotoristaScreen', () => {
     renderWithTheme(<HomeMotoristaScreen />);
     await screen.findByText('Mercado Central Ltda');
 
-    expect(deliveryService.fetchDeliveriesWithCache).toHaveBeenCalled();
+    expect(deliveryService.fetchDeliveriesPage).toHaveBeenCalled();
     expect(mapDelivery(MOCK_DELIVERY_API[0]).customer.name).toBe('Mercado Central Ltda');
+  });
+
+  it('loads next page when list reaches the end', async () => {
+    mockDeliveriesPage(MOCK_DELIVERY_API.slice(0, 1), 1, 2);
+    renderWithTheme(<HomeMotoristaScreen />);
+    await screen.findByText('Mercado Central Ltda');
+
+    const list = screen.getByTestId('home-delivery-list');
+    await act(async () => {
+      list.props.onEndReached();
+    });
+
+    await waitFor(() => {
+      expect(deliveryService.fetchDeliveriesPage).toHaveBeenCalledWith(2, { forceNetwork: undefined });
+    });
   });
 });

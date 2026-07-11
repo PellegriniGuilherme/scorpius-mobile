@@ -15,6 +15,7 @@ export function mockDeliveryToApi(m: (typeof MOCK_DELIVERIES)[number]): Delivery
     driver_id: m.driver_id,
     reference_code: m.code,
     status: STATUS_MAP[m.status] ?? 'assigned',
+    pickup_address: m.pickup_address ? { ...m.pickup_address } : { ...m.address },
     delivery_address: { ...m.address },
     delivery_scheduled_at: m.scheduled_for,
     delivery_window_start: m.window_start,

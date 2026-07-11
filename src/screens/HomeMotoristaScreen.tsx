@@ -14,12 +14,17 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { DeliveryStatusFilter } from '@/components/DeliveryStatusFilter';
 import { StatusBadge } from '@/components/StatusBadge';
-import { fetchDeliveriesWithCache, readDeliveriesFromCache } from '@/services/deliveryService';
+import {
+  fetchDeliveriesPage,
+  mergeDeliveryPages,
+  readDeliveriesFromCache,
+} from '@/services/deliveryService';
 import { subscribeDeliveryCache } from '@/services/deliveryCacheEvents';
 import { refreshOccurrenceTypesCache } from '@/services/occurrenceTypeService';
 import { formatDeliveryWindowLabel, deliveryWindowEmptyLabel } from '@/lib/formatDeliveryWindow';
-import { createAllUiStatusSet, mapDelivery, matchesUiFilters } from '@/lib/mapDelivery';
+import { createDefaultActiveUiStatusSet, mapDelivery, matchesUiFilters } from '@/lib/mapDelivery';
 import { useAuthStore } from '@/store/auth';
+import type { DeliveryApi } from '@/types/delivery';
 import type { DeliveryViewModel } from '@/types/delivery';
 import type { DeliveryUiStatus } from '@/types/delivery';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -47,32 +52,50 @@ export function HomeMotoristaScreen() {
   const insets = useSafeAreaInsets();
   const { colors, tokens } = useTheme();
   const profileBarOffset = insets.bottom + tokens.space[3] + PROFILE_BAR_HEIGHT + tokens.space[4];
-  const [statusFilters, setStatusFilters] = useState<Set<DeliveryUiStatus>>(() => createAllUiStatusSet());
-  const [items, setItems] = useState<DeliveryViewModel[]>([]);
+  const [statusFilters, setStatusFilters] = useState<Set<DeliveryUiStatus>>(() => createDefaultActiveUiStatusSet());
+  const [rawItems, setRawItems] = useState<DeliveryApi[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [fromCache, setFromCache] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
   const hasLoadedOnce = useRef(false);
+  const loadingMoreRef = useRef(false);
+
+  const items = useMemo(() => rawItems.map(mapDelivery), [rawItems]);
 
   const applyCachedItems = useCallback(async () => {
     const cached = await readDeliveriesFromCache();
     if (cached.length > 0) {
-      setItems(cached.map(mapDelivery));
+      setRawItems(cached);
+      setPage(1);
+      setHasMore(false);
     }
   }, []);
 
-  const load = useCallback(async (options?: { refresh?: boolean; silent?: boolean }) => {
+  const loadPage = useCallback(async (targetPage: number, options?: { refresh?: boolean; append?: boolean }) => {
     if (options?.refresh) {
       setRefreshing(true);
-    } else if (!options?.silent) {
+    } else if (options?.append) {
+      setLoadingMore(true);
+      loadingMoreRef.current = true;
+    } else {
       setLoading(true);
     }
     setError(null);
+
     try {
-      const res = await fetchDeliveriesWithCache({ forceNetwork: options?.refresh ? true : undefined });
-      setItems(res.data.map(mapDelivery));
+      const res = await fetchDeliveriesPage(targetPage, {
+        forceNetwork: options?.refresh ? true : undefined,
+      });
+      setRawItems((current) =>
+        options?.append ? mergeDeliveryPages(current, res.data) : res.data,
+      );
+      setPage(res.meta.current_page);
+      setHasMore(res.meta.current_page < res.meta.last_page);
       setFromCache(res.fromCache);
       void refreshOccurrenceTypesCache();
     } catch {
@@ -80,8 +103,28 @@ export function HomeMotoristaScreen() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
+      loadingMoreRef.current = false;
     }
   }, []);
+
+  const load = useCallback(
+    async (options?: { refresh?: boolean; silent?: boolean }) => {
+      if (options?.silent) {
+        await loadPage(1);
+        return;
+      }
+      await loadPage(1, { refresh: options?.refresh });
+    },
+    [loadPage],
+  );
+
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || loading || refreshing || !hasMore) {
+      return;
+    }
+    await loadPage(page + 1, { append: true });
+  }, [hasMore, loadPage, loading, page, refreshing]);
 
   useEffect(() => {
     void load();
@@ -119,50 +162,6 @@ export function HomeMotoristaScreen() {
     const inRoute = items.filter((d) => d.uiStatus === 'in_route').length;
     return { total: items.length, pending, inRoute };
   }, [items]);
-
-  function renderHeader() {
-    const firstName = driver?.name?.split(' ')[0] ?? 'motorista';
-    return (
-      <View style={{ gap: tokens.space[5], paddingHorizontal: tokens.space[6], paddingTop: insets.top + tokens.space[4] }}>
-        <View style={{ gap: tokens.space[1] }}>
-          <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, fontWeight: tokens.weight.medium, textTransform: 'uppercase' }}>
-            {ptBR.app.name}
-          </Text>
-          <Text style={{ fontSize: tokens.text['2xl'], fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
-            {ptBR.home.greeting.replace('{name}', firstName)}
-          </Text>
-          <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>
-            {ptBR.home.deliveryCount.replace('{count}', String(counts.total))}
-            {counts.inRoute > 0 ? ` · ${counts.inRoute} em rota` : ''}
-          </Text>
-          {fromCache && (
-            <View
-              style={{
-                alignSelf: 'flex-start',
-                marginTop: tokens.space[1],
-                paddingHorizontal: tokens.space[2],
-                paddingVertical: tokens.space[1],
-                borderRadius: tokens.radius.full,
-                backgroundColor: colors.statusWarningSurface,
-                borderWidth: 1,
-                borderColor: colors.statusWarningBorder,
-              }}
-            >
-              <Text style={{ color: colors.statusWarningText, fontSize: tokens.text.xs }}>
-                {ptBR.home.offlineBanner}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <DeliveryStatusFilter
-          value={statusFilters}
-          onChange={setStatusFilters}
-          deliveries={items}
-        />
-      </View>
-    );
-  }
 
   function renderItem({ item }: { item: DeliveryViewModel }) {
     const windowLabel = formatDeliveryWindowLabel(item.windowStart, item.windowEnd);
@@ -203,7 +202,7 @@ export function HomeMotoristaScreen() {
     );
   }
 
-  if (loading && items.length === 0) {
+  if (loading && rawItems.length === 0) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator color={colors.accent} size="large" />
@@ -211,15 +210,66 @@ export function HomeMotoristaScreen() {
     );
   }
 
+  const firstName = driver?.name?.split(' ')[0] ?? 'motorista';
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <View
+        style={{
+          paddingHorizontal: tokens.space[6],
+          paddingTop: insets.top + tokens.space[3],
+          paddingBottom: tokens.space[3],
+          gap: tokens.space[3],
+          borderBottomWidth: 1,
+          borderBottomColor: colors.borderDefault,
+          backgroundColor: colors.background,
+        }}
+      >
+        <View style={{ gap: tokens.space[1] }}>
+          <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, fontWeight: tokens.weight.medium, textTransform: 'uppercase' }}>
+            {ptBR.app.name}
+          </Text>
+          <Text style={{ fontSize: tokens.text['2xl'], fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
+            {ptBR.home.greeting.replace('{name}', firstName)}
+          </Text>
+          <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>
+            {ptBR.home.deliveryCount.replace('{count}', String(counts.total))}
+            {counts.inRoute > 0 ? ` · ${counts.inRoute} em rota` : ''}
+          </Text>
+          {fromCache && (
+            <View
+              style={{
+                alignSelf: 'flex-start',
+                marginTop: tokens.space[1],
+                paddingHorizontal: tokens.space[2],
+                paddingVertical: tokens.space[1],
+                borderRadius: tokens.radius.full,
+                backgroundColor: colors.statusWarningSurface,
+                borderWidth: 1,
+                borderColor: colors.statusWarningBorder,
+              }}
+            >
+              <Text style={{ color: colors.statusWarningText, fontSize: tokens.text.xs }}>
+                {ptBR.home.offlineBanner}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <DeliveryStatusFilter
+          value={statusFilters}
+          onChange={setStatusFilters}
+          deliveries={items}
+        />
+      </View>
+
       <FlatList
         testID="home-delivery-list"
+        style={{ flex: 1 }}
         data={visible}
         keyExtractor={(d) => String(d.id)}
         renderItem={renderItem}
-        ListHeaderComponent={renderHeader}
-        contentContainerStyle={{ paddingBottom: profileBarOffset, gap: 0 }}
+        contentContainerStyle={{ paddingTop: tokens.space[3], paddingBottom: profileBarOffset, flexGrow: 1 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -228,13 +278,15 @@ export function HomeMotoristaScreen() {
             colors={[colors.accent]}
           />
         }
+        onEndReached={() => void loadMore()}
+        onEndReachedThreshold={0.35}
         ListEmptyComponent={
           !loading && !error ? (
             <Card style={{ marginHorizontal: tokens.space[6] }}>
               <Text style={{ color: colors.textPrimary, fontWeight: tokens.weight.semibold, textAlign: 'center' }}>
-                {items.length === 0 ? ptBR.home.emptyTitle : ptBR.home.emptyFilter}
+                {rawItems.length === 0 ? ptBR.home.emptyTitle : ptBR.home.emptyFilter}
               </Text>
-              {items.length === 0 ? (
+              {rawItems.length === 0 ? (
                 <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm, textAlign: 'center', marginTop: tokens.space[2] }}>
                   {ptBR.home.emptyDesc}
                 </Text>
@@ -243,14 +295,17 @@ export function HomeMotoristaScreen() {
           ) : null
         }
         ListFooterComponent={
-          error ? (
-            <View style={{ paddingHorizontal: tokens.space[6], paddingTop: tokens.space[4] }}>
+          <View style={{ paddingHorizontal: tokens.space[6], paddingTop: tokens.space[2], gap: tokens.space[4] }}>
+            {loadingMore ? (
+              <ActivityIndicator color={colors.accent} style={{ paddingVertical: tokens.space[3] }} />
+            ) : null}
+            {error ? (
               <Card>
                 <Text style={{ color: colors.statusDangerText, marginBottom: tokens.space[2] }}>{error}</Text>
                 <Button label={ptBR.common.retry} variant="secondary" onPress={() => void load()} fullWidth />
               </Card>
-            </View>
-          ) : null
+            ) : null}
+          </View>
         }
       />
 

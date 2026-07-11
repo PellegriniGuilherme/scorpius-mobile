@@ -40,6 +40,7 @@ export interface DeliveryApi {
   driver_id: number | null;
   reference_code: string;
   status: DeliveryApiStatus;
+  pickup_address: DeliveryAddress | null;
   delivery_address: DeliveryAddress | null;
   delivery_scheduled_at: string | null;
   delivery_window_start: string | null;
@@ -61,6 +62,16 @@ export interface DeliveryViewModel {
   status: DeliveryApiStatus;
   uiStatus: DeliveryUiStatus;
   customer: { name: string; phone: string };
+  pickupAddress: {
+    street: string;
+    number: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+    zip: string;
+    lat: number;
+    lng: number;
+  };
   address: {
     street: string;
     number: string;

@@ -12,6 +12,8 @@ import NetInfo from '@react-native-community/netinfo';
 import { fetchDeliveryWithCache } from '@/services/deliveryService';
 import { outbox } from '@/services/OutboxService';
 import { formatDeliveryWindowLabel, deliveryWindowEmptyLabel } from '@/lib/formatDeliveryWindow';
+import { formatBrazilPhone, extractBrazilPhoneDigits } from '@/lib/formatPhone';
+import { openRecipientPhone, openRecipientWhatsApp, recipientPhoneDigits } from '@/lib/contactRecipient';
 import { mapDelivery, nextFsmAction } from '@/lib/mapDelivery';
 import { runDeliveryAction } from '@/services/deliveryActions';
 import type { DeliveryViewModel } from '@/types/delivery';
@@ -168,6 +170,10 @@ export function DetalheEntregaScreen() {
       : proofSignature
         ? ptBR.detail.proofRequirementsSignature
         : ptBR.detail.proofRequirementsNone;
+  const customerPhoneDigits = recipientPhoneDigits(delivery.customer.phone);
+  const customerPhoneLabel = customerPhoneDigits
+    ? formatBrazilPhone(extractBrazilPhoneDigits(delivery.customer.phone))
+    : delivery.customer.phone;
 
   return (
     <ScrollView
@@ -198,7 +204,29 @@ export function DetalheEntregaScreen() {
         <Text style={{ fontSize: tokens.text.lg, fontWeight: tokens.weight.semibold, color: colors.textPrimary, marginTop: tokens.space[1] }}>
           {delivery.customer.name}
         </Text>
-        <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>{delivery.customer.phone}</Text>
+        {delivery.customer.phone ? (
+          <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm, marginTop: tokens.space[1] }}>
+            {customerPhoneLabel}
+          </Text>
+        ) : null}
+        {customerPhoneDigits ? (
+          <View style={{ flexDirection: 'row', gap: tokens.space[2], marginTop: tokens.space[3] }}>
+            <Button
+              testID="detail-call-phone"
+              label={ptBR.detail.callPhone}
+              variant="secondary"
+              onPress={() => void openRecipientPhone(delivery.customer.phone)}
+              style={{ flex: 1 }}
+            />
+            <Button
+              testID="detail-call-whatsapp"
+              label={ptBR.detail.callWhatsApp}
+              variant="secondary"
+              onPress={() => void openRecipientWhatsApp(delivery.customer.phone)}
+              style={{ flex: 1 }}
+            />
+          </View>
+        ) : null}
       </Card>
 
       <Card>

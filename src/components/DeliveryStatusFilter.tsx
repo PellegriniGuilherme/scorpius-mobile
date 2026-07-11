@@ -121,7 +121,7 @@ export function DeliveryStatusFilter({
           flexDirection: 'row',
           alignItems: 'center',
           gap: tokens.space[3],
-          paddingVertical: tokens.space[3],
+          paddingVertical: tokens.space[2],
           paddingHorizontal: tokens.space[2],
           borderRadius: tokens.radius.md,
           backgroundColor: checked ? colors.accentSurface : 'transparent',
@@ -150,7 +150,7 @@ export function DeliveryStatusFilter({
   }
 
   return (
-    <View style={{ marginBottom: tokens.space[8] }}>
+    <View>
       <Pressable
         testID={`${testID}-trigger`}
         accessibilityRole="button"
@@ -164,9 +164,9 @@ export function DeliveryStatusFilter({
           borderWidth: 1,
           borderColor: colors.borderDefault,
           borderRadius: tokens.radius.md,
-          paddingHorizontal: tokens.space[4],
-          paddingVertical: tokens.space[3],
-          minHeight: 48,
+          paddingHorizontal: tokens.space[3],
+          paddingVertical: tokens.space[2],
+          minHeight: 40,
         }}
       >
         <View style={{ flex: 1, gap: tokens.space[1] }}>
@@ -195,8 +195,8 @@ export function DeliveryStatusFilter({
               backgroundColor: colors.background,
               borderTopLeftRadius: tokens.radius.lg,
               borderTopRightRadius: tokens.radius.lg,
-              padding: tokens.space[4],
-              gap: tokens.space[4],
+              padding: tokens.space[3],
+              gap: tokens.space[3],
             }}
           >
             <Text

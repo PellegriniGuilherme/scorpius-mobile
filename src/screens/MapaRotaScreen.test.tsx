@@ -46,11 +46,18 @@ describe('MapaRotaScreen', () => {
     });
   });
 
-  it('renders mapa with route title and destination address', async () => {
+  it('renders pickup route for pending delivery', async () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<MapaRotaScreen />);
+    expect(await screen.findByText('Rota até a retirada')).toBeTruthy();
+    expect(screen.getByText(/Rua da Consolação, 900/)).toBeTruthy();
+  });
+
+  it('renders delivery route for in-transit delivery', async () => {
+    setRouteParams({ deliveryId: 1002 });
+    renderWithTheme(<MapaRotaScreen />);
     expect(await screen.findByText('Rota até o destino')).toBeTruthy();
-    expect(screen.getByText(/Av. Paulista, 1500/)).toBeTruthy();
+    expect(screen.getByText(/Rua Augusta, 2200/)).toBeTruthy();
   });
 
   it('shows "Entrega não encontrada" for invalid deliveryId', async () => {
@@ -62,7 +69,7 @@ describe('MapaRotaScreen', () => {
   it('renders Google MapView on native when API key is set', async () => {
     setRouteParams({ deliveryId: 1001 });
     renderWithTheme(<MapaRotaScreen />);
-    await screen.findByText('Rota até o destino');
+    await screen.findByText('Rota até a retirada');
     expect(screen.getByTestId('google-map')).toBeTruthy();
     expect(screen.getByTestId('map-marker-destination')).toBeTruthy();
   });
@@ -99,6 +106,6 @@ describe('MapaRotaScreen', () => {
     const url = openURLSpy.mock.calls[0][0] as string;
     expect(url).toContain('google.com/maps');
     expect(url).toContain('destination=');
-    expect(url).toContain('-23.5613');
+    expect(url).toContain('-23.5489');
   });
 });

@@ -28,6 +28,16 @@ export interface Delivery {
     lat: number;
     lng: number;
   };
+  pickup_address?: {
+    street: string;
+    number: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+    zip: string;
+    lat: number;
+    lng: number;
+  };
   items: DeliveryItem[];
   scheduled_for: string;
   window_start: string;
@@ -43,6 +53,7 @@ export const MOCK_DELIVERIES: Delivery[] = [
     status: 'pending',
     customer: { name: 'Mercado Central Ltda', phone: '+551133334444' },
     address: { street: 'Av. Paulista', number: '1500', neighborhood: 'Bela Vista', city: 'São Paulo', state: 'SP', zip: '01310-100', lat: -23.5613, lng: -46.6565 },
+    pickup_address: { street: 'Rua da Consolação', number: '900', neighborhood: 'Consolação', city: 'São Paulo', state: 'SP', zip: '01302-000', lat: -23.5489, lng: -46.6388 },
     items: [
       { sku: 'SKU-001', description: 'Caixa papelão 30x30x30', quantity: 5 },
       { sku: 'SKU-002', description: 'Envelope pardo A3', quantity: 2 },
@@ -58,6 +69,7 @@ export const MOCK_DELIVERIES: Delivery[] = [
     status: 'in_route',
     customer: { name: 'Farmácia Paulista', phone: '+551144445555' },
     address: { street: 'Rua Augusta', number: '2200', neighborhood: 'Consolação', city: 'São Paulo', state: 'SP', zip: '01304-001', lat: -23.5577, lng: -46.6622 },
+    pickup_address: { street: 'Alameda Santos', number: '100', neighborhood: 'Jardins', city: 'São Paulo', state: 'SP', zip: '01418-000', lat: -23.565, lng: -46.651 },
     items: [
       { sku: 'SKU-010', description: 'Medicamento controlado A', quantity: 1 },
       { sku: 'SKU-011', description: 'Medicamento controlado B', quantity: 2 },
@@ -73,6 +85,7 @@ export const MOCK_DELIVERIES: Delivery[] = [
     status: 'delivered',
     customer: { name: 'Hospital Norte', phone: '+551155556666' },
     address: { street: 'Av. Engenheiro Luís Carlos Berrini', number: '500', neighborhood: 'Cidade Monções', city: 'São Paulo', state: 'SP', zip: '04571-000', lat: -23.6108, lng: -46.6953 },
+    pickup_address: { street: 'Av. Brigadeiro Faria Lima', number: '3000', neighborhood: 'Itaim Bibi', city: 'São Paulo', state: 'SP', zip: '04538-132', lat: -23.586, lng: -46.682 },
     items: [{ sku: 'SKU-020', description: 'Equipamento médico', quantity: 1 }],
     scheduled_for: '2026-06-21T11:00:00-03:00',
     window_start: '2026-06-21T11:00:00-03:00',

@@ -8,7 +8,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { fetchDeliveryWithCache } from '@/services/deliveryService';
 import { locationTrackingService } from '@/services/LocationTrackingService';
-import { mapDelivery } from '@/lib/mapDelivery';
+import { mapDelivery, resolveMapRouteTarget } from '@/lib/mapDelivery';
 import { fetchDrivingRouteWithCache, type DrivingRoute, type LatLng } from '@/lib/googleDirections';
 import type { MapCoordinate } from '@/lib/decodePolyline';
 import type { DeliveryViewModel } from '@/types/delivery';
@@ -47,6 +47,7 @@ function MapPanel({
   colors,
   tokens,
   customerName,
+  destinationLabel,
 }: {
   dest: LatLng;
   origin: LatLng | null;
@@ -56,6 +57,7 @@ function MapPanel({
   colors: ReturnType<typeof useTheme>['colors'];
   tokens: ReturnType<typeof useTheme>['tokens'];
   customerName: string;
+  destinationLabel: string;
 }) {
   const mapRef = useRef<MapView>(null);
 
@@ -151,7 +153,7 @@ function MapPanel({
         <Marker
           testID="map-marker-destination"
           coordinate={{ latitude: dest.lat, longitude: dest.lng }}
-          title={ptBR.map.destination}
+          title={destinationLabel}
           description={customerName}
         />
         {routeCoordinates.length > 1 && (
@@ -244,7 +246,8 @@ export function MapaRotaScreen() {
       return;
     }
 
-    const destCoords: LatLng = { lat: delivery.address.lat, lng: delivery.address.lng };
+    const routeTarget = resolveMapRouteTarget(delivery);
+    const destCoords: LatLng = routeTarget.coords;
     let cancelled = false;
 
     void (async () => {
@@ -278,11 +281,14 @@ export function MapaRotaScreen() {
     );
   }
 
-  const dest = delivery.address;
-  const destCoords: LatLng = { lat: dest.lat, lng: dest.lng };
+  const routeTarget = resolveMapRouteTarget(delivery);
+  const destCoords: LatLng = routeTarget.coords;
   const origin = userLocation;
   const km = drivingRoute?.distanceKm ?? null;
   const min = drivingRoute?.durationMin ?? null;
+  const mapTitle = routeTarget.kind === 'pickup' ? ptBR.map.titlePickup : ptBR.map.titleDelivery;
+  const destinationLabel =
+    routeTarget.kind === 'pickup' ? ptBR.map.pickupDestination : ptBR.map.destination;
 
   return (
     <ScrollView
@@ -290,7 +296,7 @@ export function MapaRotaScreen() {
       contentContainerStyle={{ padding: tokens.space[6], gap: tokens.space[5] }}
     >
         <Text style={{ fontSize: tokens.text['2xl'], fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
-          {ptBR.map.title}
+          {mapTitle}
         </Text>
 
         <MapPanel
@@ -302,11 +308,12 @@ export function MapaRotaScreen() {
           colors={colors}
           tokens={tokens}
           customerName={delivery.customer.name}
+          destinationLabel={destinationLabel}
         />
 
         <Card>
           <Text style={{ color: colors.textPrimary, fontSize: tokens.text.sm }}>
-            {dest.street}, {dest.number} — {dest.neighborhood}, {dest.city}
+            {routeTarget.addressLine}
           </Text>
         </Card>
 
@@ -337,7 +344,7 @@ export function MapaRotaScreen() {
           fullWidth
           onPress={() => {
             const originParam = origin ? `&origin=${origin.lat},${origin.lng}` : '';
-            const url = `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}${originParam}&travelmode=driving`;
+            const url = `https://www.google.com/maps/dir/?api=1&destination=${destCoords.lat},${destCoords.lng}${originParam}&travelmode=driving`;
             void Linking.openURL(url).catch(() => undefined);
           }}
         />

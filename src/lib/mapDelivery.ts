@@ -35,9 +35,23 @@ function readCoords(addr: DeliveryAddress | null): { lat: number; lng: number } 
   return { lat, lng };
 }
 
+function mapAddress(addr: DeliveryAddress | null | undefined) {
+  const { lat, lng } = readCoords(addr ?? null);
+  return {
+    street: addr?.street ?? '',
+    number: addr?.number ?? '',
+    neighborhood: addr?.neighborhood ?? '',
+    city: addr?.city ?? '',
+    state: addr?.state ?? '',
+    zip: addr?.zip ?? '',
+    lat,
+    lng,
+  };
+}
+
 export function mapDelivery(api: DeliveryApi): DeliveryViewModel {
   const addr = api.delivery_address ?? {};
-  const { lat, lng } = readCoords(addr);
+  const pickupAddr = api.pickup_address ?? {};
 
   return {
     id: api.id,
@@ -48,16 +62,8 @@ export function mapDelivery(api: DeliveryApi): DeliveryViewModel {
       name: api.recipient.name ?? '—',
       phone: api.recipient.phone ?? '',
     },
-    address: {
-      street: addr.street ?? '',
-      number: addr.number ?? '',
-      neighborhood: addr.neighborhood ?? '',
-      city: addr.city ?? '',
-      state: addr.state ?? '',
-      zip: addr.zip ?? '',
-      lat,
-      lng,
-    },
+    pickupAddress: mapAddress(pickupAddr),
+    address: mapAddress(addr),
     packageCount: api.package_count,
     weightKg: api.weight_kg,
     windowStart: api.delivery_window_start,
@@ -85,6 +91,51 @@ export function matchesUiFilters(delivery: DeliveryViewModel, filters: ReadonlyS
 
 export function createAllUiStatusSet(): Set<DeliveryUiStatus> {
   return new Set(DELIVERY_UI_STATUSES);
+}
+
+export const DEFAULT_ACTIVE_UI_STATUSES: readonly DeliveryUiStatus[] = [
+  'pending',
+  'picked_up',
+  'in_route',
+] as const;
+
+export function createDefaultActiveUiStatusSet(): Set<DeliveryUiStatus> {
+  return new Set(DEFAULT_ACTIVE_UI_STATUSES);
+}
+
+export type MapRouteKind = 'pickup' | 'delivery';
+
+export function resolveMapRouteTarget(delivery: DeliveryViewModel): {
+  kind: MapRouteKind;
+  coords: { lat: number; lng: number };
+  addressLine: string;
+} {
+  const formatLine = (address: DeliveryViewModel['address']) =>
+    `${address.street}, ${address.number} — ${address.neighborhood}, ${address.city}`;
+
+  if (delivery.status === 'in_transit') {
+    return {
+      kind: 'delivery',
+      coords: { lat: delivery.address.lat, lng: delivery.address.lng },
+      addressLine: formatLine(delivery.address),
+    };
+  }
+
+  const pickup = delivery.pickupAddress;
+  const hasPickupCoords = pickup.lat !== 0 || pickup.lng !== 0;
+  if (hasPickupCoords) {
+    return {
+      kind: 'pickup',
+      coords: { lat: pickup.lat, lng: pickup.lng },
+      addressLine: formatLine(pickup),
+    };
+  }
+
+  return {
+    kind: 'delivery',
+    coords: { lat: delivery.address.lat, lng: delivery.address.lng },
+    addressLine: formatLine(delivery.address),
+  };
 }
 
 export function countDeliveriesByUiStatus(
