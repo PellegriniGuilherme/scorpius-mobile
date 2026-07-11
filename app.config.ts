@@ -22,6 +22,7 @@ const config: ExpoConfig = {
   slug: 'scorpius-move',
   version: '0.1.0',
   orientation: 'portrait',
+  icon: './assets/icon.png',
   scheme: 'scorpiusmove',
   userInterfaceStyle: 'automatic',
   // T115 SDK 56: New Architecture é default ON; newArchEnabled foi removido da ExpoConfig
@@ -60,6 +61,7 @@ const config: ExpoConfig = {
       },
     },
     adaptiveIcon: {
+      foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#0b1220',
     },
     permissions: [
@@ -73,6 +75,7 @@ const config: ExpoConfig = {
   },
   web: {
     bundler: 'metro',
+    favicon: './assets/favicon.png',
   },
   plugins: [
     'expo-dev-client',
@@ -86,7 +89,16 @@ const config: ExpoConfig = {
       'expo-notifications',
       {
         icon: './assets/notification-icon.png',
-        color: '#0b1220',
+        color: '#f97316',
+      },
+    ],
+    [
+      'expo-splash-screen',
+      {
+        image: './assets/splash-icon.png',
+        imageWidth: 220,
+        resizeMode: 'contain',
+        backgroundColor: '#0b1220',
       },
     ],
     // Google Maps nativo: injeta com.google.android.geo.API_KEY no AndroidManifest

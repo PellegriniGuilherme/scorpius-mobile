@@ -7,9 +7,14 @@
  *  - RootNavigator: reage a authStore.isAuthenticated
  */
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useEffect, type ReactElement } from 'react';
+
+void SplashScreen.preventAutoHideAsync().catch(() => {
+  // Splash nativo pode estar indisponível em web ou dev client parcial.
+});
 import { startDeviceIdHydration } from '@/lib/deviceId';
 import { startTokenHydration } from '@/api/client';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';

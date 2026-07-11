@@ -9,6 +9,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Text, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { Button } from '@/components/Button';
+import { Logo } from '@/components/Logo';
 import { OtpInput } from '@/components/OtpInput';
 import { KeyboardFormScreen } from '@/components/KeyboardFormScreen';
 import { confirmOtp, requestOtp } from '@/api/auth';
@@ -134,7 +135,9 @@ export function OtpScreen() {
         </>
       }
     >
-      <View style={{ gap: tokens.space[4] }}>
+      <View style={{ alignItems: 'center', gap: tokens.space[4] }}>
+        <Logo size={120} />
+        <View style={{ gap: tokens.space[4], width: '100%' }}>
         <Text
           style={{
             fontSize: tokens.text['2xl'],
@@ -162,6 +165,7 @@ export function OtpScreen() {
           error={error ?? undefined}
           disabled={otpExpired}
         />
+        </View>
       </View>
     </KeyboardFormScreen>
   );

@@ -18,6 +18,8 @@ import {
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
+import { Logo } from '@/components/Logo';
 import { LoginScreen } from '@/screens/LoginScreen';
 import { OtpScreen } from '@/screens/OtpScreen';
 import { HomeMotoristaScreen } from '@/screens/HomeMotoristaScreen';
@@ -182,6 +184,14 @@ export function RootNavigator() {
     return <PreviewFlow screen={previewScreen} />;
   }
 
+  useEffect(() => {
+    if (!isLoading) {
+      void SplashScreen.hideAsync().catch(() => {
+        // noop — splash pode já ter sido escondido.
+      });
+    }
+  }, [isLoading]);
+
   if (isLoading) {
     return (
       <View
@@ -189,9 +199,11 @@ export function RootNavigator() {
           flex: 1,
           alignItems: 'center',
           justifyContent: 'center',
+          gap: 24,
           backgroundColor: colors.background,
         }}
       >
+        <Logo size={180} />
         <ActivityIndicator color={colors.accent} size="large" />
       </View>
     );

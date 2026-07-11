@@ -16,6 +16,7 @@ import { Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '@/components/Button';
+import { Logo } from '@/components/Logo';
 import { KeyboardFormScreen } from '@/components/KeyboardFormScreen';
 import { PhoneInput } from '@/components/PhoneInput';
 import { checkPhone, requestOtp } from '@/api/auth';
@@ -98,19 +99,12 @@ export function LoginScreen() {
       }
     >
       <View style={{ alignItems: 'center', gap: tokens.space[2] }}>
-        <Text
-          style={{
-            fontSize: tokens.text['3xl'],
-            fontWeight: tokens.weight.bold,
-            color: colors.textPrimary,
-          }}
-        >
-          {ptBR.app.name}
-        </Text>
+        <Logo size={140} />
         <Text
           style={{
             fontSize: tokens.text.sm,
             color: colors.textMuted,
+            textAlign: 'center',
           }}
         >
           {ptBR.app.tagline}
