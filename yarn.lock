@@ -2996,6 +2996,15 @@ expo-server@^56.0.5:
   resolved "https://registry.yarnpkg.com/expo-server/-/expo-server-56.0.5.tgz#601e9a80d166cb65b35f6a38e7a61dc6de12b91d"
   integrity sha512-SmM2p2g3Jrktpiazcst+OxhjSzOHXKAY4BPURHYHXvApzzoybMmrNF4IEZ8DKZ145BhSe4ydAmlEFCRTsdtgUQ==
 
+expo-splash-screen@~56.0.12:
+  version "56.0.12"
+  resolved "https://registry.yarnpkg.com/expo-splash-screen/-/expo-splash-screen-56.0.12.tgz#f70357dd628cb308e11c6e7fe5ba9efa61c008e9"
+  integrity sha512-RvEtJ78aNpuxdVD8TCe9viKtlYGzS9hW20fbvqvkeXDN6WAaYo1CRitPdjWNkaNNSPKOolp3zfha4EGdhXOtxg==
+  dependencies:
+    "@expo/config-plugins" "~56.0.11"
+    "@expo/image-utils" "^0.10.2"
+    xml2js "0.6.0"
+
 expo-sqlite@^56.0.5:
   version "56.0.5"
   resolved "https://registry.yarnpkg.com/expo-sqlite/-/expo-sqlite-56.0.5.tgz#7967bcf7481d3bb5316116c73200a7e01a5c5cf6"
