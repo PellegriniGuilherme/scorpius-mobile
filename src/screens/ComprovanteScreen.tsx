@@ -160,7 +160,7 @@ function ComprovanteScreenInner({ delivery }: { delivery: DeliveryViewModel }) {
       // No Expo Web (mock) retorna canceled=true. Em iOS/Android
       // retorna { canceled: false, assets: [{ uri: 'file://...' }] }.
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         quality: 0.8,
       });
       if (result.canceled || !result.assets?.[0]) return;

@@ -6,6 +6,7 @@ import {
   storeDeliveryProof,
   uploadDeliveryFile,
 } from '@/api/deliveries';
+import { generateUuid } from '@/lib/uuid';
 import { applyServerDelivery } from '@/services/deliveryMutationService';
 import { syncWorker, type ApiClient, type ProofUploadPayload } from '@/services/SyncWorker';
 
@@ -25,7 +26,7 @@ export function createProofUploadAdapter(): ApiClient {
       payload: ProofUploadPayload,
       options?: { idempotencyKey?: string },
     ): Promise<void> {
-      const idempotencyKey = options?.idempotencyKey ?? crypto.randomUUID();
+      const idempotencyKey = options?.idempotencyKey ?? generateUuid();
       void idempotencyKey;
 
       let photoUrl: string | undefined;

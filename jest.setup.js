@@ -138,7 +138,7 @@ jest.mock(
 jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
   launchImageLibraryAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
-  MediaTypeOptions: { Images: 'Images' },
+  MediaType: { Images: 'images', Videos: 'videos', LivePhotos: 'livePhotos' },
 }));
 
 // expo-haptics: no-op para testes.

@@ -28,6 +28,7 @@
  *  - Payload como TEXT JSON: SQLite não tem JSON nativo, e
  *    json_extract() precisaria de schema fixo. TEXT é flexível.
  */
+import { generateUuid } from '@/lib/uuid';
 import * as SQLite from 'expo-sqlite';
 
 /**
@@ -135,7 +136,7 @@ export class OutboxService {
     const now = Date.now();
     // T100: gera UUID v4 automaticamente. Pode ser override via options
     // (usado em testes para controle determinístico).
-    const idempotencyKey = options?.idempotencyKey ?? crypto.randomUUID();
+    const idempotencyKey = options?.idempotencyKey ?? generateUuid();
     const stmt = await db.prepareAsync(
       `INSERT INTO outbox (type, payload, attempts, next_retry_at, last_error, idempotency_key, created_at, updated_at)
        VALUES (?, ?, 0, 0, NULL, ?, ?, ?)`,
@@ -326,7 +327,7 @@ function rowToItem(row: OutboxRow): OutboxItem {
     updated_at: row.updated_at,
     // T100: rows antigos (pré-migration) podem ter null — geramos key
     // ad-hoc para compatibilidade. SyncWorker sempre usa item.idempotency_key.
-    idempotency_key: row.idempotency_key ?? crypto.randomUUID(),
+    idempotency_key: row.idempotency_key ?? generateUuid(),
   };
 }
 

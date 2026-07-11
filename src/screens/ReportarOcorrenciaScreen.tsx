@@ -73,7 +73,7 @@ export function ReportarOcorrenciaScreen() {
     setCapturing(true);
     try {
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         quality: 0.8,
       });
       if (result.canceled || !result.assets?.[0]) return;
