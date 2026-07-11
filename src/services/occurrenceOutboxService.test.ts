@@ -119,4 +119,32 @@ describe('occurrenceOutboxService', () => {
     expect(result.pending[0]?.typeSlug).toBe('delay');
     expect(result.pending[0]?.typeName).toBe('Atraso');
   });
+
+  it('keeps pending status while outbox item is retrying after a failure', async () => {
+    jest.spyOn(outbox, 'getAll').mockResolvedValue([
+      {
+        id: 11,
+        type: 'occurrence_report',
+        payload: {
+          occurrence: {
+            local_id: 'local-3',
+            delivery_id: 1001,
+            type: 'delay',
+            occurred_at: '2026-06-21T10:00:00-03:00',
+          },
+        },
+        attempts: 2,
+        next_retry_at: Date.now() + 60_000,
+        last_error: 'network error',
+        created_at: 1,
+        updated_at: 1,
+        idempotency_key: 'key-3',
+      },
+    ]);
+    (fetchDeliveryOccurrences as jest.Mock).mockResolvedValue({ data: [] });
+
+    const result = await loadDeliveryOccurrencesView(1001);
+
+    expect(result.pending[0]?.status).toBe('pending');
+  });
 });

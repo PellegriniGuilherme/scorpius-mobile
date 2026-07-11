@@ -5,7 +5,7 @@ import {
   resolveOccurrenceTypeName,
   type OccurrenceTypeNameMap,
 } from '@/services/occurrenceTypeService';
-import { syncWorker, type OccurrenceOutboxPayload } from '@/services/SyncWorker';
+import { syncWorker, type OccurrenceOutboxPayload, MAX_ATTEMPTS } from '@/services/SyncWorker';
 
 export interface PendingOccurrenceRow {
   localId: string;
@@ -50,6 +50,10 @@ function matchesRemoteOccurrence(
 
   const deltaMs = Math.abs(Date.parse(remote.occurred_at) - Date.parse(occurrence.occurred_at));
   return deltaMs <= 60_000;
+}
+
+function resolveOutboxOccurrenceStatus(item: OutboxItem): 'pending' | 'failed' {
+  return item.attempts >= MAX_ATTEMPTS ? 'failed' : 'pending';
 }
 
 export async function reconcileSyncedOccurrenceOutbox(
@@ -108,8 +112,7 @@ export async function loadDeliveryOccurrencesView(deliveryId: number): Promise<{
           typeSlug,
           typeName: resolveOccurrenceTypeName(typeSlug === '—' ? null : typeSlug, typeNameMap),
           notes: occurrence.notes,
-          status:
-            item.attempts >= 5 || item.last_error ? ('failed' as const) : ('pending' as const),
+          status: resolveOutboxOccurrenceStatus(item),
         },
       ];
     });

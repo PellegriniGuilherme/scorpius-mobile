@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { loadDeliveryOccurrencesView } from '@/services/occurrenceOutboxService';
@@ -15,6 +15,8 @@ import { ActionChoiceCard } from '@/components/ActionChoiceCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import NetInfo from '@react-native-community/netinfo';
 import { fetchDeliveryWithCache } from '@/services/deliveryService';
+import { refreshOccurrenceTypesCache } from '@/services/occurrenceTypeService';
+import { syncWorker } from '@/services/SyncWorker';
 import { formatDeliveryWindowLabel, deliveryWindowEmptyLabel } from '@/lib/formatDeliveryWindow';
 import { formatBrazilPhone, extractBrazilPhoneDigits } from '@/lib/formatPhone';
 import { openRecipientPhone, openRecipientWhatsApp, recipientPhoneDigits } from '@/lib/contactRecipient';
@@ -57,6 +59,7 @@ export function DetalheEntregaScreen() {
   const { colors, tokens } = useTheme();
   const [delivery, setDelivery] = useState<DeliveryViewModel | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [acting, setActing] = useState(false);
   const [pendingSync, setPendingSync] = useState(false);
   const [occurrences, setOccurrences] = useState<DriverOccurrence[]>([]);
@@ -76,16 +79,28 @@ export function DetalheEntregaScreen() {
     }
   }, []);
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+  const load = useCallback(async (options?: { silent?: boolean; refresh?: boolean }) => {
+    if (options?.refresh) {
+      setRefreshing(true);
+    } else if (!options?.silent) {
+      setLoading(true);
+    }
     try {
+      if (options?.refresh) {
+        await syncWorker.drain();
+        void refreshOccurrenceTypesCache();
+      }
       const res = await fetchDeliveryWithCache(route.params.deliveryId);
       setDelivery(res.data ? mapDelivery(res.data) : null);
       if (res.data) {
         await loadOccurrences(route.params.deliveryId);
       }
     } finally {
-      if (!silent) setLoading(false);
+      if (options?.refresh) {
+        setRefreshing(false);
+      } else if (!options?.silent) {
+        setLoading(false);
+      }
     }
   }, [route.params.deliveryId, loadOccurrences]);
 
@@ -93,10 +108,14 @@ export function DetalheEntregaScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void load(hasLoadedOnce.current);
+      void load({ silent: hasLoadedOnce.current });
       hasLoadedOnce.current = true;
     }, [load]),
   );
+
+  function handleRefresh() {
+    void load({ refresh: true, silent: true });
+  }
 
   async function runAction(payload: Parameters<typeof runDeliveryAction>[0]) {
     if (!delivery) return;
@@ -106,7 +125,7 @@ export function DetalheEntregaScreen() {
       const net = await NetInfo.fetch();
       await runDeliveryAction(payload);
       setPendingSync(!net.isConnected);
-      await load(true);
+      await load({ silent: true });
     } catch {
       setPendingSync(true);
     } finally {
@@ -167,8 +186,17 @@ export function DetalheEntregaScreen() {
 
   return (
     <ScrollView
+      testID="detail-scroll"
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: tokens.space[6], gap: tokens.space[5] }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          tintColor={colors.accent}
+          colors={[colors.accent]}
+        />
+      }
     >
       <View style={{ gap: tokens.space[2] }}>
         <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, fontWeight: tokens.weight.medium, textTransform: 'uppercase' }}>

@@ -9,10 +9,26 @@
  *  - estado "entrega não encontrada" (id inválido)
  *  - botão "Finalizar entrega" some quando status = 'delivered'
  */
-import { renderWithTheme, fireEvent, screen, waitFor } from '@/../jest.test-utils';
+import { renderWithTheme, fireEvent, screen, waitFor, act } from '@/../jest.test-utils';
 import { Linking } from 'react-native';
 import { DetalheEntregaScreen } from './DetalheEntregaScreen';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { syncWorker } from '@/services/SyncWorker';
+import { loadDeliveryOccurrencesView } from '@/services/occurrenceOutboxService';
+
+jest.mock('@/services/SyncWorker', () => ({
+  syncWorker: {
+    drain: jest.fn().mockResolvedValue(0),
+  },
+}));
+
+jest.mock('@/services/occurrenceOutboxService', () => ({
+  loadDeliveryOccurrencesView: jest.fn().mockResolvedValue({
+    remote: [],
+    pending: [],
+    typeNameMap: {},
+  }),
+}));
 
 jest.mock('@react-navigation/native', () => {
   const mockReal = jest.requireActual('@react-navigation/native');
@@ -115,5 +131,23 @@ describe('DetalheEntregaScreen', () => {
     await screen.findByText('Hospital Norte');
     expect(screen.queryByText('Finalizar entrega')).toBeNull();
     expect(screen.getByText('Abrir mapa')).toBeTruthy();
+  });
+
+  it('pull-to-refresh drains outbox and reloads occurrences', async () => {
+    setRouteParams({ deliveryId: 1001 });
+    renderWithTheme(<DetalheEntregaScreen />);
+    await screen.findByText('Mercado Central Ltda');
+
+    const scroll = screen.getByTestId('detail-scroll');
+    const { refreshControl } = scroll.props;
+    expect(refreshControl).toBeTruthy();
+    await act(async () => {
+      await refreshControl.props.onRefresh();
+    });
+
+    await waitFor(() => {
+      expect(syncWorker.drain).toHaveBeenCalled();
+      expect(loadDeliveryOccurrencesView).toHaveBeenCalledWith(1001);
+    });
   });
 });
