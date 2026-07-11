@@ -159,6 +159,7 @@ jest.mock(
   () => ({
     requestForegroundPermissionsAsync: jest.fn().mockResolvedValue({ granted: true, status: 'granted' }),
     getCurrentPositionAsync: jest.fn().mockResolvedValue({ coords: { latitude: -23.5613, longitude: -46.6565 } }),
+    watchPositionAsync: jest.fn().mockResolvedValue({ remove: jest.fn() }),
     Accuracy: { High: 'high', Balanced: 'balanced' },
   }),
   { virtual: true }

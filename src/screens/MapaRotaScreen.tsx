@@ -7,7 +7,7 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { fetchDeliveryWithCache } from '@/services/deliveryService';
-import { telemetryService } from '@/services/TelemetryService';
+import { locationTrackingService } from '@/services/LocationTrackingService';
 import { mapDelivery } from '@/lib/mapDelivery';
 import { fetchDrivingRouteWithCache, type DrivingRoute, type LatLng } from '@/lib/googleDirections';
 import type { MapCoordinate } from '@/lib/decodePolyline';
@@ -203,6 +203,12 @@ export function MapaRotaScreen() {
   useEffect(() => {
     if (!delivery) return;
 
+    if (locationTrackingService.isTrackingDelivery(delivery.id)) {
+      return locationTrackingService.subscribe((point) => {
+        setUserLocation({ lat: point.lat, lng: point.lng });
+      });
+    }
+
     let subscription: Location.LocationSubscription | null = null;
     let cancelled = false;
 
@@ -212,13 +218,7 @@ export function MapaRotaScreen() {
 
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       if (cancelled) return;
-      const initial = { lat: position.coords.latitude, lng: position.coords.longitude };
-      setUserLocation(initial);
-      telemetryService.record({
-        ...initial,
-        recorded_at: new Date().toISOString(),
-        delivery_id: delivery.id,
-      });
+      setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
 
       subscription = await Location.watchPositionAsync(
         {
@@ -227,13 +227,7 @@ export function MapaRotaScreen() {
           timeInterval: 15_000,
         },
         (next) => {
-          const point = { lat: next.coords.latitude, lng: next.coords.longitude };
-          setUserLocation(point);
-          telemetryService.record({
-            ...point,
-            recorded_at: new Date().toISOString(),
-            delivery_id: delivery.id,
-          });
+          setUserLocation({ lat: next.coords.latitude, lng: next.coords.longitude });
         },
       );
     })();
@@ -241,7 +235,6 @@ export function MapaRotaScreen() {
     return () => {
       cancelled = true;
       subscription?.remove();
-      void telemetryService.flush();
     };
   }, [delivery]);
 

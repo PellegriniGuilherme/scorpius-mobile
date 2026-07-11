@@ -35,6 +35,7 @@ import { setupSyncWorker } from '@/api/boot';
 import { registerDeviceToken } from '@/api/occurrenceTypes';
 import { refreshOccurrenceTypesCache } from '@/services/occurrenceTypeService';
 import { syncWorker } from '@/services/SyncWorker';
+import { locationTrackingService, resumeLocationTrackingFromCache } from '@/services/LocationTrackingService';
 import { notifications } from '@/services/NotificationsService';
 import type { AuthStackParamList, AppStackParamList } from './types';
 
@@ -165,10 +166,12 @@ export function RootNavigator() {
   useEffect(() => {
     if (!isAuthenticated) {
       syncWorker.stop();
+      void locationTrackingService.stopTracking();
       return;
     }
     void syncWorker.start();
     void refreshOccurrenceTypesCache();
+    void resumeLocationTrackingFromCache();
     if (!driver) return;
     void (async () => {
       const reg = await notifications.registerForPushNotificationsAsync();

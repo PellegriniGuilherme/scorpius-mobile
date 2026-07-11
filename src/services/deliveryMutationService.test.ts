@@ -1,6 +1,7 @@
 import { deliveryCache, _resetDeliveryCacheForTests } from '@/services/DeliveryCacheService';
 import { subscribeDeliveryCache } from '@/services/deliveryCacheEvents';
 import { applyOptimisticAction, applyServerDelivery } from '@/services/deliveryMutationService';
+import { _resetLocationTrackingForTests, locationTrackingService } from '@/services/LocationTrackingService';
 import { MOCK_DELIVERY_API } from '@/testFixtures/deliveryApi';
 
 const mockSqlite = jest.requireActual('../../jest.sqlite-mock.js') as {
@@ -11,6 +12,7 @@ describe('deliveryMutationService', () => {
   beforeEach(async () => {
     mockSqlite.__resetMockDb();
     _resetDeliveryCacheForTests();
+    _resetLocationTrackingForTests();
     await deliveryCache.clear();
     await deliveryCache.upsertMany(MOCK_DELIVERY_API);
   });
@@ -32,6 +34,19 @@ describe('deliveryMutationService', () => {
     await applyOptimisticAction({ deliveryId: 1001, action: 'start' });
     const patched = await deliveryCache.getById(1001);
     expect(patched?.status).toBe('picked_up');
+  });
+
+  it('starts GPS tracking when route begins', async () => {
+    await applyOptimisticAction({ deliveryId: 1001, action: 'in_transit' });
+
+    expect(locationTrackingService.getActiveDeliveryId()).toBe(1001);
+  });
+
+  it('stops GPS tracking when delivery is completed or failed', async () => {
+    await applyOptimisticAction({ deliveryId: 1001, action: 'in_transit' });
+    await applyOptimisticAction({ deliveryId: 1001, action: 'complete' });
+
+    expect(locationTrackingService.getActiveDeliveryId()).toBeNull();
   });
 
   it('applyServerDelivery upserts authoritative payload and notifies', async () => {
