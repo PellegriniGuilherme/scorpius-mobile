@@ -7,12 +7,13 @@
  */
 import { renderWithTheme, screen } from '@/../jest.test-utils';
 import { StatusBadge } from './StatusBadge';
-import type { DeliveryStatus } from '@/mocks/deliveries';
+import type { DeliveryUiStatus } from '@/types/delivery';
 
 describe('StatusBadge', () => {
-  const statuses: DeliveryStatus[] = ['pending', 'in_route', 'delivered', 'failed'];
-  const labels: Record<DeliveryStatus, string> = {
+  const statuses: DeliveryUiStatus[] = ['pending', 'picked_up', 'in_route', 'delivered', 'failed'];
+  const labels: Record<DeliveryUiStatus, string> = {
     pending: 'Pendente',
+    picked_up: 'Retirada',
     in_route: 'Em rota',
     delivered: 'Entregue',
     failed: 'Falhou',

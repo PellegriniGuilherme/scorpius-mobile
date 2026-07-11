@@ -33,6 +33,7 @@ interface PendingOccurrenceRow {
 function statusLabel(s: DeliveryUiStatus): string {
   return {
     pending: ptBR.detail.statusPending,
+    picked_up: ptBR.detail.statusPickedUp,
     in_route: ptBR.detail.statusInRoute,
     delivered: ptBR.detail.statusDelivered,
     failed: ptBR.detail.statusFailed,
@@ -306,7 +307,7 @@ export function DetalheEntregaScreen() {
         <Button label={ptBR.detail.openMap} onPress={() => navigation.navigate('MapaRota', { deliveryId: delivery.id })} fullWidth />
         {fsmAction && fsmAction !== 'proof' && (
           <Button
-            label={fsmAction === 'start' ? ptBR.detail.startRoute : ptBR.detail.markInTransit}
+            label={fsmAction === 'start' ? ptBR.detail.pickUp : ptBR.detail.startRoute}
             onPress={() => void handleFsmAction()}
             loading={acting}
             fullWidth
@@ -320,7 +321,7 @@ export function DetalheEntregaScreen() {
             fullWidth
           />
         )}
-        {delivery.status === 'in_transit' && (
+        {(delivery.status === 'picked_up' || delivery.status === 'in_transit') && (
           <View style={{ gap: tokens.space[3], marginTop: tokens.space[2] }}>
             <View style={{ gap: tokens.space[1] }}>
               <Text

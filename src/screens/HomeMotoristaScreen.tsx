@@ -32,6 +32,7 @@ type Nav = NativeStackNavigationProp<AppStackParamList, 'HomeMotorista'>;
 function statusLabel(s: DeliveryUiStatus): string {
   return {
     pending: ptBR.detail.statusPending,
+    picked_up: ptBR.detail.statusPickedUp,
     in_route: ptBR.detail.statusInRoute,
     delivered: ptBR.detail.statusDelivered,
     failed: ptBR.detail.statusFailed,

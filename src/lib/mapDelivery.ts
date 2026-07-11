@@ -9,6 +9,7 @@ import type {
 
 export const DELIVERY_UI_STATUSES: readonly DeliveryUiStatus[] = [
   'pending',
+  'picked_up',
   'in_route',
   'delivered',
   'failed',
@@ -22,7 +23,8 @@ const DEFAULT_PROOF_REQUIREMENTS: ProofRequirements = {
 export function toUiStatus(status: DeliveryApiStatus): DeliveryUiStatus {
   if (status === 'delivered') return 'delivered';
   if (status === 'failed' || status === 'cancelled') return 'failed';
-  if (status === 'picked_up' || status === 'in_transit') return 'in_route';
+  if (status === 'picked_up') return 'picked_up';
+  if (status === 'in_transit') return 'in_route';
   return 'pending';
 }
 
@@ -91,6 +93,7 @@ export function countDeliveriesByUiStatus(
   const counts = {
     all: deliveries.length,
     pending: 0,
+    picked_up: 0,
     in_route: 0,
     delivered: 0,
     failed: 0,

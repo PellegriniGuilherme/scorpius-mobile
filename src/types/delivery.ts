@@ -9,7 +9,7 @@ export type DeliveryApiStatus =
   | 'cancelled';
 
 /** UI filter/display status */
-export type DeliveryUiStatus = 'pending' | 'in_route' | 'delivered' | 'failed';
+export type DeliveryUiStatus = 'pending' | 'picked_up' | 'in_route' | 'delivered' | 'failed';
 
 export interface DeliveryAddress {
   street?: string;

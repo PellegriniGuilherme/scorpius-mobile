@@ -57,6 +57,7 @@ export const ptBR = {
     filter: {
       all: 'Todas',
       pending: 'Pendentes',
+      pickedUp: 'Retiradas',
       inRoute: 'Em rota',
       delivered: 'Entregues',
       failed: 'Falhas',
@@ -69,8 +70,8 @@ export const ptBR = {
   detail: {
     title: 'Entrega #{code}',
     pendingSync: 'Sincronizando…',
+    pickUp: 'Retirar',
     startRoute: 'Iniciar rota',
-    markInTransit: 'Marcar em trânsito',
     reportOccurrence: 'Reportar ocorrência',
     markFailed: 'Marcar falha',
     customerSection: 'Cliente',
@@ -86,6 +87,7 @@ export const ptBR = {
     proofRequirementsSignature: 'Assinatura obrigatória',
     proofRequirementsNone: 'Sem comprovante — confirmação direta no app.',
     statusPending: 'Pendente',
+    statusPickedUp: 'Retirada',
     statusInRoute: 'Em rota',
     statusDelivered: 'Entregue',
     statusFailed: 'Falhou',

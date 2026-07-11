@@ -1,4 +1,4 @@
-import { mapDelivery } from '@/lib/mapDelivery';
+import { mapDelivery, toUiStatus } from '@/lib/mapDelivery';
 import { MOCK_DELIVERY_API } from '@/testFixtures/deliveryApi';
 import type { DeliveryApi } from '@/types/delivery';
 
@@ -33,5 +33,10 @@ describe('mapDelivery', () => {
     const mapped = mapDelivery(api);
     expect(mapped.windowStart).toBeNull();
     expect(mapped.windowEnd).toBeNull();
+  });
+
+  it('maps picked_up and in_transit to distinct UI statuses', () => {
+    expect(toUiStatus('picked_up')).toBe('picked_up');
+    expect(toUiStatus('in_transit')).toBe('in_route');
   });
 });

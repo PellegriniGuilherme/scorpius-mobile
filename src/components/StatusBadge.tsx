@@ -6,6 +6,7 @@ export function StatusBadge({ status, label }: { status: DeliveryUiStatus; label
   const { colors, tokens } = useTheme();
   const map: Record<DeliveryUiStatus, { bg: string; fg: string; border: string }> = {
     pending: { bg: colors.statusNeutralSurface, fg: colors.statusNeutralText, border: colors.statusNeutralBorder },
+    picked_up: { bg: colors.statusWarningSurface, fg: colors.statusWarningText, border: colors.statusWarningBorder },
     in_route: { bg: colors.statusInfoSurface, fg: colors.statusInfoText, border: colors.statusInfoBorder },
     delivered: { bg: colors.statusSuccessSurface, fg: colors.statusSuccessText, border: colors.statusSuccessBorder },
     failed: { bg: colors.statusDangerSurface, fg: colors.statusDangerText, border: colors.statusDangerBorder },

@@ -13,6 +13,7 @@ import { ptBR } from '@/i18n/pt-BR';
 
 const STATUS_LABELS: Record<DeliveryUiStatus, string> = {
   pending: ptBR.home.filter.pending,
+  picked_up: ptBR.home.filter.pickedUp,
   in_route: ptBR.home.filter.inRoute,
   delivered: ptBR.home.filter.delivered,
   failed: ptBR.home.filter.failed,
