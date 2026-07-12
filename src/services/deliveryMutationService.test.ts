@@ -42,6 +42,12 @@ describe('deliveryMutationService', () => {
     expect(locationTrackingService.getActiveDeliveryId()).toBe(1001);
   });
 
+  it('starts GPS tracking when delivery is picked up', async () => {
+    await applyOptimisticAction({ deliveryId: 1001, action: 'start' });
+
+    expect(locationTrackingService.getActiveDeliveryId()).toBe(1001);
+  });
+
   it('stops GPS tracking when delivery is completed or failed', async () => {
     await applyOptimisticAction({ deliveryId: 1001, action: 'in_transit' });
     await applyOptimisticAction({ deliveryId: 1001, action: 'complete' });
@@ -61,5 +67,12 @@ describe('deliveryMutationService', () => {
     expect(listener).toHaveBeenCalledTimes(1);
 
     unsubscribe();
+  });
+
+  it('applyServerDelivery starts tracking for picked_up deliveries', async () => {
+    const serverDelivery = { ...MOCK_DELIVERY_API[0], status: 'picked_up' as const };
+    await applyServerDelivery(serverDelivery);
+
+    expect(locationTrackingService.getActiveDeliveryId()).toBe(1001);
   });
 });

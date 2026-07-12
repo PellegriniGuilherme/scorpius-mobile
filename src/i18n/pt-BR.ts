@@ -106,6 +106,7 @@ export const ptBR = {
     occurrencesEmpty: 'Nenhuma ocorrência registrada para esta entrega.',
     occurrencePending: 'Pendente de sincronização',
     occurrenceFailed: 'Falha no envio',
+    locationPermissionDenied: 'Ative a localização (inclusive em segundo plano) para rastrear a entrega.',
   },
   failDelivery: {
     title: 'Marcar falha',

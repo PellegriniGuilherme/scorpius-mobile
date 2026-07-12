@@ -1,6 +1,10 @@
 import NetInfo from '@react-native-community/netinfo';
 import { listDriverDeliveries, getDriverDelivery } from '@/api/deliveries';
 import { deliveryCache } from '@/services/DeliveryCacheService';
+import {
+  syncLocationTrackingWithStatus,
+  syncTrackingForCachedDeliveries,
+} from '@/services/LocationTrackingService';
 import type { DeliveryApi, DeliveryListResponse } from '@/types/delivery';
 
 export const DELIVERIES_PAGE_SIZE = 20;
@@ -46,6 +50,7 @@ export async function fetchDeliveriesPage(
   try {
     const res = await listDriverDeliveries({ page, per_page: perPage });
     await deliveryCache.upsertMany(res.data);
+    await syncTrackingForCachedDeliveries(res.data);
     const meta = res.meta ?? buildPageMeta(res.data.length, page, perPage);
     return { data: res.data, meta, fromCache: false };
   } catch {
@@ -72,6 +77,7 @@ export async function fetchDeliveryWithCache(id: number): Promise<{ data: Delive
     try {
       const data = await getDriverDelivery(id);
       await deliveryCache.upsertOne(data);
+      await syncLocationTrackingWithStatus(data.id, data.status);
       return { data, fromCache: false };
     } catch {
       const cached = await deliveryCache.getById(id);

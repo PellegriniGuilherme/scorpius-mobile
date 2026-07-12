@@ -40,6 +40,17 @@ jest.mock('@/api/occurrenceTypes', () => ({
   listDriverOccurrenceTypes: jest.fn().mockResolvedValue({ data: [] }),
 }));
 
+jest.mock('@/services/LocationTrackingService', () => ({
+  locationTrackingService: {
+    stopTracking: jest.fn().mockResolvedValue(undefined),
+    isTrackingDelivery: jest.fn().mockReturnValue(false),
+    subscribe: jest.fn().mockReturnValue(() => undefined),
+    getLastLocation: jest.fn().mockReturnValue(null),
+  },
+  requestLocationPermissions: jest.fn().mockResolvedValue({ foreground: 'granted', background: 'granted' }),
+  resumeLocationTrackingFromCache: jest.fn().mockResolvedValue(undefined),
+}));
+
 import { renderWithTheme, screen, waitFor } from '@/../jest.test-utils';
 import { RootNavigator, navigationRef } from './RootNavigator';
 import { useAuthStore } from '@/store/auth';

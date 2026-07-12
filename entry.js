@@ -7,6 +7,7 @@
  * Reactotron: primeiro import (imports são hoisted; require() rodaria tarde demais).
  */
 import './src/lib/reactotron-setup';
+import './src/tasks/locationTrackingTask';
 
 import registerRootComponent from 'expo/src/launch/registerRootComponent';
 import App from './App';

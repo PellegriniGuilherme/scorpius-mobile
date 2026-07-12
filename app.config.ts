@@ -71,6 +71,9 @@ const config: ExpoConfig = {
       'POST_NOTIFICATIONS',
       'ACCESS_FINE_LOCATION',
       'ACCESS_COARSE_LOCATION',
+      'ACCESS_BACKGROUND_LOCATION',
+      'FOREGROUND_SERVICE',
+      'FOREGROUND_SERVICE_LOCATION',
     ],
   },
   web: {
@@ -108,6 +111,17 @@ const config: ExpoConfig = {
         androidGoogleMapsApiKey:
           process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID ?? '',
         iosGoogleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS ?? '',
+      },
+    ],
+    [
+      'expo-location',
+      {
+        locationAlwaysAndWhenInUsePermission:
+          'Permite rastrear sua rota durante entregas, mesmo com o app em segundo plano.',
+        locationWhenInUsePermission: 'Mostra sua localização no mapa durante a entrega.',
+        isAndroidBackgroundLocationEnabled: true,
+        isAndroidForegroundServiceEnabled: true,
+        isIosBackgroundLocationEnabled: true,
       },
     ],
   ],

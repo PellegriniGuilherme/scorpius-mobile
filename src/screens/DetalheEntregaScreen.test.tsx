@@ -30,6 +30,25 @@ jest.mock('@/services/occurrenceOutboxService', () => ({
   }),
 }));
 
+jest.mock('@/services/LocationTrackingService', () => {
+  const actual = jest.requireActual('@/services/LocationTrackingService');
+  return {
+    ...actual,
+    locationTrackingService: {
+      isTrackingDelivery: jest.fn().mockReturnValue(true),
+      getActiveDeliveryId: jest.fn().mockReturnValue(1001),
+      startTracking: jest.fn().mockResolvedValue(true),
+      stopTracking: jest.fn().mockResolvedValue(undefined),
+      subscribe: jest.fn().mockReturnValue(() => undefined),
+      getLastLocation: jest.fn().mockReturnValue(null),
+    },
+    syncLocationTrackingWithStatus: jest.fn().mockResolvedValue(true),
+    requestLocationPermissions: jest.fn().mockResolvedValue({ foreground: 'granted', background: 'granted' }),
+    resumeLocationTrackingFromCache: jest.fn().mockResolvedValue(undefined),
+    syncTrackingForCachedDeliveries: jest.fn().mockResolvedValue(undefined),
+  };
+});
+
 jest.mock('@react-navigation/native', () => {
   const mockReal = jest.requireActual('@react-navigation/native');
   return {

@@ -15,6 +15,10 @@ import { ActionChoiceCard } from '@/components/ActionChoiceCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import NetInfo from '@react-native-community/netinfo';
 import { fetchDeliveryWithCache } from '@/services/deliveryService';
+import {
+  isTrackableDeliveryStatus,
+  locationTrackingService,
+} from '@/services/LocationTrackingService';
 import { refreshOccurrenceTypesCache } from '@/services/occurrenceTypeService';
 import { syncWorker } from '@/services/SyncWorker';
 import { formatDeliveryWindowLabel, deliveryWindowEmptyLabel } from '@/lib/formatDeliveryWindow';
@@ -66,6 +70,7 @@ export function DetalheEntregaScreen() {
   const [pendingOccurrences, setPendingOccurrences] = useState<PendingOccurrenceRow[]>([]);
   const [occurrenceTypeNames, setOccurrenceTypeNames] = useState<OccurrenceTypeNameMap>({});
   const [occurrencesLoading, setOccurrencesLoading] = useState(false);
+  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
 
   const loadOccurrences = useCallback(async (deliveryId: number) => {
     setOccurrencesLoading(true);
@@ -91,9 +96,17 @@ export function DetalheEntregaScreen() {
         void refreshOccurrenceTypesCache();
       }
       const res = await fetchDeliveryWithCache(route.params.deliveryId);
-      setDelivery(res.data ? mapDelivery(res.data) : null);
+      const mapped = res.data ? mapDelivery(res.data) : null;
+      setDelivery(mapped);
       if (res.data) {
         await loadOccurrences(route.params.deliveryId);
+        if (isTrackableDeliveryStatus(res.data.status)) {
+          setLocationPermissionDenied(!locationTrackingService.isTrackingDelivery(res.data.id));
+        } else {
+          setLocationPermissionDenied(false);
+        }
+      } else {
+        setLocationPermissionDenied(false);
       }
     } finally {
       if (options?.refresh) {
@@ -214,6 +227,14 @@ export function DetalheEntregaScreen() {
           )}
         </View>
       </View>
+
+      {locationPermissionDenied ? (
+        <AlertBanner
+          tone="warning"
+          message={ptBR.detail.locationPermissionDenied}
+          testID="detail-location-permission-banner"
+        />
+      ) : null}
 
       <Card>
         <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, textTransform: 'uppercase' }}>

@@ -153,14 +153,27 @@ jest.mock(
   { virtual: true }
 );
 
-// expo-location: requestForegroundPermissionsAsync mock.
+// expo-location: foreground + background location mocks.
 jest.mock(
   'expo-location',
   () => ({
     requestForegroundPermissionsAsync: jest.fn().mockResolvedValue({ granted: true, status: 'granted' }),
+    requestBackgroundPermissionsAsync: jest.fn().mockResolvedValue({ granted: true, status: 'granted' }),
     getCurrentPositionAsync: jest.fn().mockResolvedValue({ coords: { latitude: -23.5613, longitude: -46.6565 } }),
     watchPositionAsync: jest.fn().mockResolvedValue({ remove: jest.fn() }),
+    startLocationUpdatesAsync: jest.fn().mockResolvedValue(undefined),
+    stopLocationUpdatesAsync: jest.fn().mockResolvedValue(undefined),
+    hasStartedLocationUpdatesAsync: jest.fn().mockResolvedValue(false),
     Accuracy: { High: 'high', Balanced: 'balanced' },
+  }),
+  { virtual: true }
+);
+
+jest.mock(
+  'expo-task-manager',
+  () => ({
+    defineTask: jest.fn(),
+    isTaskRegisteredAsync: jest.fn().mockResolvedValue(true),
   }),
   { virtual: true }
 );
