@@ -10,20 +10,28 @@ export interface TelemetryPoint {
   delivery_id?: number;
 }
 
-const FLUSH_SIZE = 20;
+/** Flush cedo para o hub ver a rota em tempo quase real (antes: 20 ≈ 5 min). */
+const FLUSH_SIZE = 3;
+const FLUSH_INTERVAL_MS = 15_000;
 
 class TelemetryService {
   private buffer: TelemetryPoint[] = [];
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private flushing = false;
 
   record(point: TelemetryPoint): void {
     this.buffer.push(point);
     if (this.buffer.length >= FLUSH_SIZE) {
       void this.flush();
+      return;
     }
+    this.scheduleFlush();
   }
 
   async flush(): Promise<void> {
-    if (this.buffer.length === 0) return;
+    this.clearFlushTimer();
+    if (this.flushing || this.buffer.length === 0) return;
+    this.flushing = true;
     const batch = this.buffer.splice(0, this.buffer.length);
     try {
       await uploadTelemetry({
@@ -36,7 +44,24 @@ class TelemetryService {
       });
     } catch {
       this.buffer.unshift(...batch);
+      this.scheduleFlush();
+    } finally {
+      this.flushing = false;
     }
+  }
+
+  private scheduleFlush(): void {
+    if (this.flushTimer != null) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      void this.flush();
+    }, FLUSH_INTERVAL_MS);
+  }
+
+  private clearFlushTimer(): void {
+    if (this.flushTimer == null) return;
+    clearTimeout(this.flushTimer);
+    this.flushTimer = null;
   }
 }
 

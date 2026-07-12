@@ -33,4 +33,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
     recorded_at: new Date(latest.timestamp).toISOString(),
     delivery_id: deliveryId,
   });
+
+  // Background: não espera encher o buffer — envia o que tiver.
+  await telemetryService.flush();
 });

@@ -125,7 +125,7 @@ describe('LocationTrackingService telemetry flush', () => {
   it('uploads buffered points when flush threshold is reached', async () => {
     const { telemetryService } = await import('@/services/TelemetryService');
 
-    for (let index = 0; index < 20; index += 1) {
+    for (let index = 0; index < 3; index += 1) {
       telemetryService.record({
         lat: -23.5 + index * 0.0001,
         lng: -46.6,
