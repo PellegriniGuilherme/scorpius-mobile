@@ -119,6 +119,29 @@ describe('OutboxService', () => {
     expect(ready).toBeNull();
   });
 
+  it('next() skips DLQ items so they cannot starve the queue', async () => {
+    const dlqId = await svc.enqueue('proof_upload', { deliveryId: 1 });
+    for (let i = 0; i < 5; i += 1) {
+      await svc.markFailed(dlqId, '[DLQ] fail', 0);
+    }
+    await new Promise((r) => setTimeout(r, 5));
+    const readyId = await svc.enqueue('occurrence_report', { deliveryId: 2 });
+
+    const ready = await svc.next();
+    expect(ready?.id).toBe(readyId);
+    expect(ready?.type).toBe('occurrence_report');
+  });
+
+  it('releaseBackoff() resets future next_retry_at for non-DLQ items', async () => {
+    const id = await svc.enqueue('occurrence_report', { deliveryId: 1 });
+    await svc.markFailed(id, 'network', Date.now() + 60_000);
+    expect(await svc.next()).toBeNull();
+
+    const changed = await svc.releaseBackoff();
+    expect(changed).toBe(1);
+    expect((await svc.next())?.id).toBe(id);
+  });
+
   it('two services share the same DB (singleton storage)', async () => {
     const id = await svc.enqueue('proof_upload', { deliveryId: 1001 });
     const svc2 = new OutboxService();

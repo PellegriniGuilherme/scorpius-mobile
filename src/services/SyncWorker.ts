@@ -112,7 +112,8 @@ export class SyncWorker {
     // Estado inicial de rede
     try {
       const state = await NetInfo.fetch();
-      this.isOnline = !!state.isConnected;
+      const reachable = state.isInternetReachable;
+      this.isOnline = !!state.isConnected && reachable !== false;
     } catch {
       this.isOnline = true; // assume online se NetInfo falhar
     }
@@ -236,10 +237,12 @@ export class SyncWorker {
 
   private onNetChange = (state: NetInfoState): void => {
     const wasOnline = this.isOnline;
-    this.isOnline = !!state.isConnected;
-    // Se voltou a ficar online, tenta processar backlog
+    // isInternetReachable pode ser null enquanto NetInfo ainda resolve —
+    // nesse caso confia em isConnected.
+    const reachable = state.isInternetReachable;
+    this.isOnline = !!state.isConnected && reachable !== false;
     if (!wasOnline && this.isOnline) {
-      void this.tick();
+      void this.drain();
     }
   };
 

@@ -189,6 +189,9 @@ export class OutboxService {
   /**
    * Retorna o próximo item pronto para processar (next_retry_at <= now),
    * ou null se não há nada pendente. Order by created_at (FIFO).
+   *
+   * Exclui DLQ (`attempts >= MAX_ATTEMPTS`): items mortos usavam
+   * `next_retry_at = 0` e bloqueavam a fila inteira (sempre elegíveis).
    */
   async next(): Promise<OutboxItem | null> {
     await this.init();
@@ -198,12 +201,53 @@ export class OutboxService {
       `SELECT id, type, payload, attempts, next_retry_at, last_error, idempotency_key, created_at, updated_at
        FROM outbox
        WHERE next_retry_at <= ?
+         AND attempts < ?
        ORDER BY created_at ASC
        LIMIT 1`,
       now,
+      MAX_ATTEMPTS,
     );
     if (!row) return null;
     return rowToItem(row);
+  }
+
+  /**
+   * Libera items em backoff para retry imediato (pull-to-refresh / reopen).
+   * Não mexe na DLQ — esses exigem retryDLQ() explícito.
+   */
+  async releaseBackoff(): Promise<number> {
+    await this.init();
+    const db = this.requireDb();
+    const now = Date.now();
+    const result = await db.runAsync(
+      `UPDATE outbox
+       SET next_retry_at = 0,
+           updated_at = ?
+       WHERE attempts < ?
+         AND next_retry_at > 0`,
+      now,
+      MAX_ATTEMPTS,
+    );
+    return result.changes;
+  }
+
+  /**
+   * Força um item específico a ficar pronto: zera attempts (se DLQ) e next_retry_at.
+   */
+  async forceRetry(id: number): Promise<void> {
+    await this.init();
+    const db = this.requireDb();
+    const now = Date.now();
+    await db.runAsync(
+      `UPDATE outbox
+       SET attempts = 0,
+           next_retry_at = 0,
+           last_error = NULL,
+           updated_at = ?
+       WHERE id = ?`,
+      now,
+      id,
+    );
   }
 
   /**

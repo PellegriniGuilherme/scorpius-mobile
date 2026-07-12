@@ -114,6 +114,7 @@ export function ReportarOcorrenciaScreen() {
           occurred_at: occurredAt,
         },
       });
+      await outbox.releaseBackoff();
       await syncWorker.drain();
       setPhase('success');
     } finally {

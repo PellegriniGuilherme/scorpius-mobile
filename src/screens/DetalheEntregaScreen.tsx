@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { loadDeliveryOccurrencesView } from '@/services/occurrenceOutboxService';
+import { loadDeliveryOccurrencesView, retryPendingOccurrence } from '@/services/occurrenceOutboxService';
 import {
   resolveOccurrenceTypeName,
   type OccurrenceTypeNameMap,
@@ -37,10 +37,12 @@ type Route_ = RouteProp<AppStackParamList, 'DetalheEntrega'>;
 
 interface PendingOccurrenceRow {
   localId: string;
+  outboxId: number;
   typeSlug: string;
   typeName: string;
   notes?: string;
   status: 'pending' | 'failed';
+  lastError?: string | null;
 }
 
 function remoteOccurrenceLabel(occ: DriverOccurrence, typeNameMap: OccurrenceTypeNameMap): string {
@@ -356,6 +358,26 @@ export function DetalheEntregaScreen() {
                     ? ptBR.detail.occurrenceFailed
                     : ptBR.detail.occurrencePending}
                 </Text>
+                {occ.lastError ? (
+                  <Text
+                    style={{ color: colors.textMuted, fontSize: tokens.text.xs }}
+                    numberOfLines={2}
+                  >
+                    {occ.lastError}
+                  </Text>
+                ) : null}
+                <Button
+                  testID={`occurrence-retry-${occ.outboxId}`}
+                  label={ptBR.detail.occurrenceRetry}
+                  variant="ghost"
+                  onPress={() => {
+                    void (async () => {
+                      await retryPendingOccurrence(occ.outboxId);
+                      await loadOccurrences(delivery.id);
+                    })();
+                  }}
+                  fullWidth
+                />
               </View>
             ))}
           </View>

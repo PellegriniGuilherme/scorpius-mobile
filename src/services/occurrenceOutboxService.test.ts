@@ -30,6 +30,7 @@ jest.mock('@/services/SyncWorker', () => ({
 describe('occurrenceOutboxService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(outbox, 'releaseBackoff').mockResolvedValue(0);
   });
 
   it('removes outbox items already present on server by client_local_id', async () => {
@@ -118,6 +119,7 @@ describe('occurrenceOutboxService', () => {
     expect(result.pending).toHaveLength(1);
     expect(result.pending[0]?.typeSlug).toBe('delay');
     expect(result.pending[0]?.typeName).toBe('Atraso');
+    expect(result.pending[0]?.outboxId).toBe(10);
   });
 
   it('keeps pending status while outbox item is retrying after a failure', async () => {

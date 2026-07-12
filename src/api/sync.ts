@@ -22,11 +22,30 @@ export async function ingestEvents(batchId: string, events: SyncEventPayload[]):
   await apiClient.post('/sync/events', { batch_id: batchId, events });
 }
 
+export interface SyncBatchResponse {
+  id: number;
+  batch_id: string;
+  status: string;
+  event_count: number;
+  success_count: number;
+  failure_count: number;
+  conflict_count: number;
+  error?: string | null;
+}
+
 export async function ingestOccurrences(
   batchId: string,
   occurrences: SyncOccurrencePayload[],
-): Promise<void> {
-  await apiClient.post('/sync/occurrences', { batch_id: batchId, occurrences });
+): Promise<SyncBatchResponse> {
+  const { data } = await apiClient.post<{ data: SyncBatchResponse }>(
+    '/sync/occurrences',
+    { batch_id: batchId, occurrences },
+  );
+  const batch = data.data;
+  if (batch.status === 'failed' || (batch.success_count === 0 && batch.failure_count > 0)) {
+    throw new Error(batch.error?.trim() || 'occurrence_sync_failed');
+  }
+  return batch;
 }
 
 export async function getSyncCursor(): Promise<unknown> {

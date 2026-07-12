@@ -9,10 +9,12 @@ import { syncWorker, type OccurrenceOutboxPayload, MAX_ATTEMPTS } from '@/servic
 
 export interface PendingOccurrenceRow {
   localId: string;
+  outboxId: number;
   typeSlug: string;
   typeName: string;
   notes?: string;
   status: 'pending' | 'failed';
+  lastError?: string | null;
 }
 
 function normalizeOccurrenceDescription(notes?: string): string {
@@ -79,11 +81,19 @@ export async function reconcileSyncedOccurrenceOutbox(
   }
 }
 
+export async function retryPendingOccurrence(outboxId: number): Promise<void> {
+  await outbox.forceRetry(outboxId);
+  await syncWorker.drain();
+}
+
 export async function loadDeliveryOccurrencesView(deliveryId: number): Promise<{
   remote: DriverOccurrence[];
   pending: PendingOccurrenceRow[];
   typeNameMap: OccurrenceTypeNameMap;
 }> {
+  // Libera backoff para não ficar preso em "pendente" com internet
+  // (ex.: falha anterior agendou retry daqui a 30–600s).
+  await outbox.releaseBackoff();
   await syncWorker.drain();
 
   const typeNameMap = await fetchOccurrenceTypeNameMap(true);
@@ -109,10 +119,12 @@ export async function loadDeliveryOccurrencesView(deliveryId: number): Promise<{
       return [
         {
           localId: occurrence.local_id ?? String(item.id),
+          outboxId: item.id,
           typeSlug,
           typeName: resolveOccurrenceTypeName(typeSlug === '—' ? null : typeSlug, typeNameMap),
           notes: occurrence.notes,
           status: resolveOutboxOccurrenceStatus(item),
+          lastError: item.last_error,
         },
       ];
     });
