@@ -22,6 +22,10 @@ import {
 import { refreshOccurrenceTypesCache } from '@/services/occurrenceTypeService';
 import { syncWorker } from '@/services/SyncWorker';
 import { formatDeliveryWindowLabel, deliveryWindowEmptyLabel } from '@/lib/formatDeliveryWindow';
+import {
+  formatAddressLocalityLine,
+  formatAddressStreetLine,
+} from '@/lib/formatAddress';
 import { formatBrazilPhone, extractBrazilPhoneDigits } from '@/lib/formatPhone';
 import { openRecipientPhone, openRecipientWhatsApp, recipientPhoneDigits } from '@/lib/contactRecipient';
 import { mapDelivery, nextFsmAction } from '@/lib/mapDelivery';
@@ -198,6 +202,10 @@ export function DetalheEntregaScreen() {
   const customerPhoneLabel = customerPhoneDigits
     ? formatBrazilPhone(extractBrazilPhoneDigits(delivery.customer.phone))
     : delivery.customer.phone;
+  const addressPrimary = formatAddressStreetLine(delivery.address);
+  const addressLocality = formatAddressLocalityLine(delivery.address);
+  const addressZip = delivery.address.zip?.trim() ?? '';
+  const hasAddress = Boolean(addressPrimary || addressLocality || addressZip);
 
   return (
     <ScrollView
@@ -274,13 +282,25 @@ export function DetalheEntregaScreen() {
         <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, textTransform: 'uppercase' }}>
           {ptBR.detail.addressSection}
         </Text>
-        <Text style={{ fontSize: tokens.text.base, color: colors.textPrimary, marginTop: tokens.space[1] }}>
-          {delivery.address.street}, {delivery.address.number}
-        </Text>
-        <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>{delivery.address.neighborhood}</Text>
-        <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>
-          {delivery.address.city} / {delivery.address.state} — CEP {delivery.address.zip}
-        </Text>
+        <View style={{ marginTop: tokens.space[1], gap: tokens.space[1] }}>
+          {!hasAddress ? (
+            <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm }}>
+              {ptBR.home.addressUnavailable}
+            </Text>
+          ) : (
+            <>
+              {addressPrimary ? (
+                <Text style={{ fontSize: tokens.text.base, color: colors.textPrimary }}>{addressPrimary}</Text>
+              ) : null}
+              {addressLocality ? (
+                <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>{addressLocality}</Text>
+              ) : null}
+              {addressZip ? (
+                <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>CEP {addressZip}</Text>
+              ) : null}
+            </>
+          )}
+        </View>
       </Card>
 
       <Card>

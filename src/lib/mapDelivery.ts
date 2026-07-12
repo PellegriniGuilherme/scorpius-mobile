@@ -1,3 +1,4 @@
+import { formatAddressLine } from '@/lib/formatAddress';
 import type {
   DeliveryAddress,
   DeliveryApi,
@@ -110,14 +111,11 @@ export function resolveMapRouteTarget(delivery: DeliveryViewModel): {
   coords: { lat: number; lng: number };
   addressLine: string;
 } {
-  const formatLine = (address: DeliveryViewModel['address']) =>
-    `${address.street}, ${address.number} — ${address.neighborhood}, ${address.city}`;
-
   if (delivery.status === 'in_transit') {
     return {
       kind: 'delivery',
       coords: { lat: delivery.address.lat, lng: delivery.address.lng },
-      addressLine: formatLine(delivery.address),
+      addressLine: formatAddressLine(delivery.address),
     };
   }
 
@@ -127,14 +125,14 @@ export function resolveMapRouteTarget(delivery: DeliveryViewModel): {
     return {
       kind: 'pickup',
       coords: { lat: pickup.lat, lng: pickup.lng },
-      addressLine: formatLine(pickup),
+      addressLine: formatAddressLine(pickup),
     };
   }
 
   return {
     kind: 'delivery',
     coords: { lat: delivery.address.lat, lng: delivery.address.lng },
-    addressLine: formatLine(delivery.address),
+    addressLine: formatAddressLine(delivery.address),
   };
 }
 

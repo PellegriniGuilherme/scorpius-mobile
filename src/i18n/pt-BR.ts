@@ -66,6 +66,9 @@ export const ptBR = {
       apply: 'Aplicar',
     },
     emptyFilter: 'Nenhuma entrega neste filtro.',
+    addressUnavailable: 'Endereço não informado',
+    packageCountOne: '{count} pacote',
+    packageCountOther: '{count} pacotes',
   },
   detail: {
     title: 'Entrega #{code}',

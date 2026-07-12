@@ -12,8 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { DeliveryListCard } from '@/components/DeliveryListCard';
 import { DeliveryStatusFilter } from '@/components/DeliveryStatusFilter';
-import { StatusBadge } from '@/components/StatusBadge';
 import {
   fetchDeliveriesPage,
   mergeDeliveryPages,
@@ -21,28 +21,15 @@ import {
 } from '@/services/deliveryService';
 import { subscribeDeliveryCache } from '@/services/deliveryCacheEvents';
 import { refreshOccurrenceTypesCache } from '@/services/occurrenceTypeService';
-import { formatDeliveryWindowLabel, deliveryWindowEmptyLabel } from '@/lib/formatDeliveryWindow';
 import { createDefaultActiveUiStatusSet, mapDelivery, matchesUiFilters } from '@/lib/mapDelivery';
 import { useAuthStore } from '@/store/auth';
-import type { DeliveryApi } from '@/types/delivery';
-import type { DeliveryViewModel } from '@/types/delivery';
-import type { DeliveryUiStatus } from '@/types/delivery';
+import type { DeliveryApi, DeliveryUiStatus, DeliveryViewModel } from '@/types/delivery';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
 import type { AppStackParamList } from '@/navigation/types';
 import NetInfo from '@react-native-community/netinfo';
 
 type Nav = NativeStackNavigationProp<AppStackParamList, 'HomeMotorista'>;
-
-function statusLabel(s: DeliveryUiStatus): string {
-  return {
-    pending: ptBR.detail.statusPending,
-    picked_up: ptBR.detail.statusPickedUp,
-    in_route: ptBR.detail.statusInRoute,
-    delivered: ptBR.detail.statusDelivered,
-    failed: ptBR.detail.statusFailed,
-  }[s];
-}
 
 const PROFILE_BAR_HEIGHT = 56;
 
@@ -164,7 +151,6 @@ export function HomeMotoristaScreen() {
   }, [items]);
 
   function renderItem({ item }: { item: DeliveryViewModel }) {
-    const windowLabel = formatDeliveryWindowLabel(item.windowStart, item.windowEnd);
     return (
       <Pressable
         onPress={() => navigation.navigate('DetalheEntrega', { deliveryId: item.id })}
@@ -174,30 +160,7 @@ export function HomeMotoristaScreen() {
           marginBottom: tokens.space[3],
         })}
       >
-        <Card>
-          <View style={{ gap: tokens.space[3] }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: tokens.space[2] }}>
-              <View style={{ flex: 1, gap: tokens.space[1] }}>
-                <Text style={{ fontSize: tokens.text.lg, fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
-                  {item.customer.name}
-                </Text>
-                <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs }}>#{item.code}</Text>
-              </View>
-              <StatusBadge status={item.uiStatus} label={statusLabel(item.uiStatus)} />
-            </View>
-            <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }} numberOfLines={2}>
-              {item.address.street}, {item.address.number} — {item.address.neighborhood}
-            </Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ color: colors.accent, fontSize: tokens.text.sm, fontWeight: tokens.weight.semibold }}>
-                {windowLabel ?? deliveryWindowEmptyLabel()}
-              </Text>
-              <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs }}>
-                {item.packageCount} pkg{item.packageCount !== 1 ? 's' : ''}
-              </Text>
-            </View>
-          </View>
-        </Card>
+        <DeliveryListCard delivery={item} />
       </Pressable>
     );
   }
