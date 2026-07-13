@@ -19,11 +19,19 @@
     },
     "preview": {
       "distribution": "internal",
+      "environment": "preview",
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://staging.hub.portalscorpiustecnologia.com.br/api/v1"
       }
     },
     "production": {
+      "environment": "production",
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.hub.portalscorpiustecnologia.com.br/api/v1"
       }
