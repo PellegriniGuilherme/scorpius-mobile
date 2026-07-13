@@ -11,7 +11,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://staging.hub.portalscorpiustecnologia.com.br/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://api.hub.portalscorpiustecnologia.com.br/api/v1"
       },
       "ios": {
         "simulator": true
@@ -24,7 +24,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://staging.hub.portalscorpiustecnologia.com.br/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://api.hub.portalscorpiustecnologia.com.br/api/v1"
       }
     },
     "production": {
