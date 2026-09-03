@@ -10,44 +10,23 @@
  * este caminho é no-op (params da URL não confiáveis).
  */
 import { useEffect, useMemo } from 'react';
-import {
-  NavigationContainer,
-  DefaultTheme,
-  DarkTheme,
-  createNavigationContainerRef,
-} from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View } from 'react-native';
-import * as SplashScreen from 'expo-splash-screen';
-import { Logo } from '@/components/Logo';
 import { LoginScreen } from '@/screens/LoginScreen';
 import { OtpScreen } from '@/screens/OtpScreen';
 import { HomeMotoristaScreen } from '@/screens/HomeMotoristaScreen';
 import { DetalheEntregaScreen } from '@/screens/DetalheEntregaScreen';
 import { MapaRotaScreen } from '@/screens/MapaRotaScreen';
 import { ComprovanteScreen } from '@/screens/ComprovanteScreen';
-import { ReportarOcorrenciaScreen } from '@/screens/ReportarOcorrenciaScreen';
-import { MarcarFalhaScreen } from '@/screens/MarcarFalhaScreen';
+import { OcorrenciaScreen } from '@/screens/OcorrenciaScreen';
 import { PerfilMotoristaScreen } from '@/screens/PerfilMotoristaScreen';
 import { useAuthStore } from '@/store/auth';
 import { useTheme } from '@/theme/ThemeProvider';
-import { setupSyncWorker } from '@/api/boot';
-import { registerDeviceToken } from '@/api/occurrenceTypes';
-import { refreshOccurrenceTypesCache } from '@/services/occurrenceTypeService';
-import { syncWorker } from '@/services/SyncWorker';
-import { locationTrackingService, requestLocationPermissions, resumeLocationTrackingFromCache } from '@/services/LocationTrackingService';
-import { notifications } from '@/services/NotificationsService';
 import type { AuthStackParamList, AppStackParamList } from './types';
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const AppStack = createNativeStackNavigator<AppStackParamList>();
-
-/**
- * T099 — referência global ao NavigationContainer para permitir
- * navegação a partir de handlers externos (push notifications,
- * deep links).
- */
-export const navigationRef = createNavigationContainerRef<AppStackParamList>();
 
 function AuthFlow() {
   return (
@@ -64,9 +43,8 @@ function AppFlow({ initial }: { initial?: keyof AppStackParamList }) {
       <AppStack.Screen name="HomeMotorista" component={HomeMotoristaScreen} options={{ title: 'Scorpius Move', headerShown: false }} />
       <AppStack.Screen name="DetalheEntrega" component={DetalheEntregaScreen} options={{ title: 'Entrega' }} />
       <AppStack.Screen name="MapaRota" component={MapaRotaScreen} options={{ title: 'Rota' }} />
-      <AppStack.Screen name="Comprovante" component={ComprovanteScreen} options={{ title: 'Finalizar entrega' }} />
-      <AppStack.Screen name="ReportarOcorrencia" component={ReportarOcorrenciaScreen} options={{ title: 'Ocorrência' }} />
-      <AppStack.Screen name="MarcarFalha" component={MarcarFalhaScreen} options={{ title: 'Marcar falha' }} />
+      <AppStack.Screen name="Comprovante" component={ComprovanteScreen} options={{ title: 'Comprovante' }} />
+      <AppStack.Screen name="Ocorrencia" component={OcorrenciaScreen} options={{ title: 'Ocorrência' }} />
       <AppStack.Screen name="PerfilMotorista" component={PerfilMotoristaScreen} options={{ title: 'Perfil' }} />
     </AppStack.Navigator>
   );
@@ -76,10 +54,7 @@ type PreviewScreen = 'login' | 'otp' | 'home' | 'detalhe' | 'mapa' | 'comprovant
 
 function readPreviewFromUrl(): PreviewScreen | null {
   if (typeof window === 'undefined') return null;
-  // jsdom (jest) define `window` mas `window.location` pode ser undefined —
-  // defendemos para não quebrar testes. Em browser real, sempre tem search.
-  const search = (window as { location?: { search?: string } }).location?.search ?? '';
-  const params = new URLSearchParams(search);
+  const params = new URLSearchParams(window.location.search);
   const v = params.get('preview');
   const valid: PreviewScreen[] = ['login', 'otp', 'home', 'detalhe', 'mapa', 'comprovante', 'perfil'];
   return valid.includes((v ?? '') as PreviewScreen) ? (v as PreviewScreen) : null;
@@ -125,7 +100,7 @@ function PreviewFlow({ screen }: { screen: PreviewScreen }) {
   const initialParamsLookup: Record<string, object> = {
     DetalheEntrega: { deliveryId: 1001 },
     MapaRota: { deliveryId: 1001 },
-    Comprovante: { deliveryId: 1001 },
+    Comprovante: { deliveryId: 1001, documentId: 10010 },
   };
   const initialParams = initialParamsLookup[initial as string];
   return (
@@ -134,7 +109,7 @@ function PreviewFlow({ screen }: { screen: PreviewScreen }) {
         <AppStack.Screen name="HomeMotorista" component={HomeMotoristaScreen} options={{ title: 'Scorpius Move', headerShown: false }} />
         <AppStack.Screen name="DetalheEntrega" component={DetalheEntregaScreen} options={{ title: 'Entrega #SC-1001' }} initialParams={initial === 'DetalheEntrega' ? (initialParams as never) : undefined} />
         <AppStack.Screen name="MapaRota" component={MapaRotaScreen} options={{ title: 'Rota' }} initialParams={initial === 'MapaRota' ? (initialParams as never) : undefined} />
-        <AppStack.Screen name="Comprovante" component={ComprovanteScreen} options={{ title: 'Finalizar entrega' }} initialParams={initial === 'Comprovante' ? (initialParams as never) : undefined} />
+        <AppStack.Screen name="Comprovante" component={ComprovanteScreen} options={{ title: 'Comprovante' }} initialParams={initial === 'Comprovante' ? (initialParams as never) : undefined} />
         <AppStack.Screen name="PerfilMotorista" component={PerfilMotoristaScreen} options={{ title: 'Perfil' }} />
       </AppStack.Navigator>
     </NavigationContainer>
@@ -146,55 +121,16 @@ export function RootNavigator() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
   const bootstrap = useAuthStore((s) => s.bootstrap);
-  const driver = useAuthStore((s) => s.driver);
 
   useEffect(() => {
     void bootstrap();
-    setupSyncWorker();
-    notifications.configureForegroundBehavior();
-    notifications.setApiPostDeviceToken(async (token, driverId) => {
-      void driverId;
-      await registerDeviceToken(token);
-    });
-    notifications.onNotificationResponse((deliveryId) => {
-      if (navigationRef.isReady()) {
-        navigationRef.navigate('DetalheEntrega', { deliveryId });
-      }
-    });
   }, [bootstrap]);
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      syncWorker.stop();
-      void locationTrackingService.stopTracking();
-      return;
-    }
-    void syncWorker.start();
-    void refreshOccurrenceTypesCache();
-    void requestLocationPermissions();
-    void resumeLocationTrackingFromCache();
-    if (!driver) return;
-    void (async () => {
-      const reg = await notifications.registerForPushNotificationsAsync();
-      if (reg?.expoPushToken) {
-        await notifications.registerTokenWithBackend(driver.id, reg.expoPushToken);
-      }
-    })();
-  }, [isAuthenticated, driver?.id]);
 
   const previewScreen = useMemo(() => readPreviewFromUrl(), []);
 
   if (previewScreen) {
     return <PreviewFlow screen={previewScreen} />;
   }
-
-  useEffect(() => {
-    if (!isLoading) {
-      void SplashScreen.hideAsync().catch(() => {
-        // noop — splash pode já ter sido escondido.
-      });
-    }
-  }, [isLoading]);
 
   if (isLoading) {
     return (
@@ -203,11 +139,9 @@ export function RootNavigator() {
           flex: 1,
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 24,
           backgroundColor: colors.background,
         }}
       >
-        <Logo size={180} />
         <ActivityIndicator color={colors.accent} size="large" />
       </View>
     );
@@ -226,23 +160,6 @@ export function RootNavigator() {
   };
 
   return (
-    <NavigationContainer
-      ref={navigationRef}
-      theme={navTheme}
-      linking={{
-        prefixes: ['scorpiusmove://', 'scorpius://', 'https://app.scorpius.com.br'],
-        config: {
-          screens: {
-            HomeMotorista: 'home',
-            DetalheEntrega: 'delivery/:deliveryId',
-            MapaRota: 'delivery/:deliveryId/route',
-            Comprovante: 'delivery/:deliveryId/proof',
-            PerfilMotorista: 'profile',
-          },
-        },
-      }}
-    >
-      {isAuthenticated ? <AppFlow /> : <AuthFlow />}
-    </NavigationContainer>
+    <NavigationContainer theme={navTheme}>{isAuthenticated ? <AppFlow /> : <AuthFlow />}</NavigationContainer>
   );
 }

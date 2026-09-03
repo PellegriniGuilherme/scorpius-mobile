@@ -11,10 +11,9 @@ interface InputProps extends Omit<TextInputProps, 'style'> {
   label: string;
   hint?: string;
   error?: string;
-  multiline?: boolean;
 }
 
-export function Input({ label, hint, error, multiline, ...rest }: InputProps) {
+export function Input({ label, hint, error, ...rest }: InputProps) {
   const { colors, tokens } = useTheme();
   return (
     <View style={{ gap: tokens.space[1] }}>
@@ -31,8 +30,6 @@ export function Input({ label, hint, error, multiline, ...rest }: InputProps) {
         accessibilityLabel={label}
         accessibilityHint={hint}
         placeholderTextColor={colors.textSubtle}
-        multiline={multiline}
-        textAlignVertical={multiline ? 'top' : 'auto'}
         {...rest}
         style={{
           backgroundColor: colors.surfacePanel,
@@ -42,7 +39,7 @@ export function Input({ label, hint, error, multiline, ...rest }: InputProps) {
           borderRadius: tokens.radius.md,
           paddingHorizontal: tokens.space[3],
           paddingVertical: tokens.space[3],
-          minHeight: multiline ? 100 : 48,
+          minHeight: 48,
           fontSize: tokens.text.base,
         }}
       />

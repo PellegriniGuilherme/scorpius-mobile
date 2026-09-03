@@ -1,39 +1,22 @@
 /**
- * Scorpius Move — Driver auth (OTP flow).
+ * Driver auth — OTP flow aligned with hub-api.
  */
-import { apiClient, authClient, loadRefreshToken, setAccessToken, setRefreshToken } from './client';
+import { apiClient, setAccessToken } from './client';
+import * as SecureStore from 'expo-secure-store';
+
+const DRIVER_KEY = 'scorpius:move:driver';
 
 export interface OtpRequestResponse {
   message: string;
   expires_in: number;
 }
 
-export interface CheckPhoneResponse {
-  exists: boolean;
-  driverId?: string;
-}
-
-export async function checkPhone(phone: string): Promise<CheckPhoneResponse> {
-  const { data } = await authClient.get<CheckPhoneResponse>('/driver/check-phone', {
-    params: { phone },
-  });
-  return data;
-}
-
-export async function requestOtp(whatsapp: string, deviceId: string): Promise<OtpRequestResponse> {
-  const { data } = await authClient.post<OtpRequestResponse>('/driver/auth/otp', {
-    whatsapp,
-    device_id: deviceId,
-  });
-  return data;
-}
-
-export interface DriverSession {
+export interface DriverMe {
   id: number;
   name: string;
   whatsapp: string;
-  company_id: number;
-  company_name?: string | null;
+  company_id?: number;
+  status?: 'active' | 'invited' | 'blocked' | 'deactivated';
 }
 
 export interface OtpConfirmResponse {
@@ -41,7 +24,15 @@ export interface OtpConfirmResponse {
   refresh_token: string;
   token_type: 'Bearer';
   expires_in: number;
-  driver: DriverSession;
+  driver: DriverMe;
+}
+
+export async function requestOtp(whatsapp: string, deviceId: string): Promise<OtpRequestResponse> {
+  const { data } = await apiClient.post<OtpRequestResponse>('/driver/auth/otp', {
+    whatsapp,
+    device_id: deviceId,
+  });
+  return data;
 }
 
 export async function confirmOtp(
@@ -49,43 +40,38 @@ export async function confirmOtp(
   otp: string,
   deviceId: string,
 ): Promise<OtpConfirmResponse> {
-  const { data } = await authClient.post<OtpConfirmResponse>('/driver/auth/otp/confirm', {
+  const { data } = await apiClient.post<OtpConfirmResponse>('/driver/auth/otp/confirm', {
     whatsapp,
     otp,
     device_id: deviceId,
   });
   await setAccessToken(data.access_token);
-  await setRefreshToken(data.refresh_token);
+  await persistDriver(data.driver);
   return data;
 }
 
-export async function refreshTokens(deviceId: string): Promise<boolean> {
-  const refreshToken = await loadRefreshToken();
-  if (!refreshToken) return false;
+export async function persistDriver(driver: DriverMe): Promise<void> {
   try {
-    const { data } = await authClient.post<OtpConfirmResponse>('/driver/auth/refresh', {
-      refresh_token: refreshToken,
-      device_id: deviceId,
-    });
-    await setAccessToken(data.access_token);
-    await setRefreshToken(data.refresh_token);
-    return true;
+    await SecureStore.setItemAsync(DRIVER_KEY, JSON.stringify(driver));
   } catch {
-    return false;
+    // ignore
   }
 }
 
-export async function logoutDriver(deviceId: string): Promise<void> {
+export async function loadPersistedDriver(): Promise<DriverMe | null> {
   try {
-    await apiClient.post('/driver/auth/logout', { device_id: deviceId });
+    const raw = await SecureStore.getItemAsync(DRIVER_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as DriverMe;
   } catch {
-    // best-effort
+    return null;
   }
-  await setAccessToken(null);
-  await setRefreshToken(null);
 }
 
-export async function fetchDriverMe(): Promise<DriverSession> {
-  const { data } = await apiClient.get<{ driver: DriverSession }>('/driver/auth/me');
-  return data.driver;
+export async function clearPersistedDriver(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(DRIVER_KEY);
+  } catch {
+    // ignore
+  }
 }

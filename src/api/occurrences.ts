@@ -1,40 +1,30 @@
 import { apiClient } from './client';
 
-export type DriverOccurrenceStatus = 'open' | 'acknowledged' | 'resolved';
+export type OccurrenceTypeScope = 'delivery' | 'document' | 'both';
 
-export interface DriverOccurrenceTypeSummary {
+export interface OccurrenceType {
   id: number;
   slug: string;
   name: string;
+  severity: string;
+  requires_photo: boolean;
+  scope: OccurrenceTypeScope;
 }
 
-export interface DriverOccurrence {
-  id: number;
-  delivery_id: number | null;
-  client_local_id?: string | null;
-  type?: DriverOccurrenceTypeSummary | null;
-  description?: string | null;
-  status: DriverOccurrenceStatus;
-  occurred_at?: string;
-  created_at: string;
+export async function listOccurrenceTypes(): Promise<OccurrenceType[]> {
+  const { data } = await apiClient.get<{ data: OccurrenceType[] }>('/driver/occurrence-types');
+  return data.data;
 }
 
-export interface DriverOccurrenceListResponse {
-  data: DriverOccurrence[];
-  meta: {
-    has_more: boolean;
-    next_cursor_id: number | null;
-    per_page: number;
-  };
-}
-
-export async function fetchDeliveryOccurrences(
+export async function createOccurrence(
   deliveryId: number,
-  params: { cursor_id?: number; per_page?: number } = {},
-): Promise<DriverOccurrenceListResponse> {
-  const { data } = await apiClient.get<DriverOccurrenceListResponse>(
-    `/driver/deliveries/${deliveryId}/occurrences`,
-    { params },
-  );
-  return data;
+  payload: {
+    occurrence_type_id: number;
+    document_id?: number;
+    description: string;
+    photo_paths?: string[];
+    location?: { lat: number; lng: number };
+  },
+): Promise<void> {
+  await apiClient.post(`/driver/deliveries/${deliveryId}/occurrences`, payload);
 }

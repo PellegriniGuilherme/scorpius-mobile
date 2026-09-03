@@ -1,43 +1,27 @@
 /**
  * Scorpius Move — Auth store (Zustand).
+ *
+ * State: { driver, isAuthenticated, isLoading }.
+ * O access_token é gerenciado pelo `api/client.ts` (SecureStore);
+ * esta store apenas rastreia o objeto Driver para uso na UI.
+ *
+ * Persistência do driver: NÃO persistido (driver é recarregado via
+ * /driver/auth/me no boot se o token existir).
  */
 import { create } from 'zustand';
-import {
-  getAccessTokenSync,
-  registerSessionExpiredHandler,
-  startTokenHydration,
-  waitForTokenHydration,
-} from '@/api/client';
-import { fetchDriverMe, logoutDriver, type DriverSession } from '@/api/auth';
-import { unregisterDeviceToken } from '@/api/occurrenceTypes';
-import { getDeviceId } from '@/lib/deviceId';
-import { deliveryCache } from '@/services/DeliveryCacheService';
-import { occurrenceTypeCache } from '@/services/OccurrenceTypeCacheService';
-import { syncWorker } from '@/services/SyncWorker';
+import { loadAccessToken, setAccessToken, registerSessionExpiredHandler } from '@/api/client';
+import { loadPersistedDriver, clearPersistedDriver, type DriverMe } from '@/api/auth';
 
 interface AuthState {
-  driver: DriverSession | null;
+  driver: DriverMe | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
 
   bootstrap: () => Promise<void>;
-  setSession: (driver: DriverSession) => void;
+  setSession: (driver: DriverMe) => void;
   clearSession: () => Promise<void>;
   setError: (error: string | null) => void;
-}
-
-async function restoreSessionFromStoredToken(): Promise<void> {
-  await waitForTokenHydration(2_000);
-  const token = getAccessTokenSync();
-  if (!token) return;
-
-  try {
-    const driver = await fetchDriverMe();
-    useAuthStore.setState({ driver, isAuthenticated: true, isLoading: false, error: null });
-  } catch {
-    // token inválido — permanece na tela de login
-  }
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -46,10 +30,28 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
   error: null,
 
+  /**
+   * Chamado no boot do app. Se há token no SecureStore, tenta
+   * revalidar via /driver/auth/me. Em sucesso, hidrata a store.
+   * Em 401, o interceptor do apiClient já limpou o token.
+   */
   bootstrap: async () => {
-    set({ isLoading: false, isAuthenticated: false, driver: null, error: null });
-    startTokenHydration();
-    void restoreSessionFromStoredToken();
+    set({ isLoading: true, error: null });
+    try {
+      const token = await loadAccessToken();
+      if (token == null) {
+        set({ isLoading: false, isAuthenticated: false, driver: null });
+        return;
+      }
+      const driver = await loadPersistedDriver();
+      if (driver) {
+        set({ driver, isAuthenticated: true, isLoading: false });
+      } else {
+        set({ isLoading: false, isAuthenticated: false, driver: null });
+      }
+    } catch {
+      set({ isLoading: false, isAuthenticated: false, driver: null });
+    }
   },
 
   setSession: (driver) => {
@@ -57,27 +59,17 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   clearSession: async () => {
-    syncWorker.stop();
-    const deviceId = getDeviceId();
-    await logoutDriver(deviceId);
-    try {
-      const { notifications } = await import('@/services/NotificationsService');
-      const token = notifications.getLastRegisteredToken();
-      if (token) {
-        await unregisterDeviceToken(token);
-      }
-      notifications.stop();
-    } catch {
-      // best-effort push unregister
-    }
-    await deliveryCache.clear();
-    await occurrenceTypeCache.clear();
+    await setAccessToken(null);
+    await clearPersistedDriver();
     set({ driver: null, isAuthenticated: false, isLoading: false, error: null });
   },
 
   setError: (error) => set({ error }),
 }));
 
+// ---------------------------------------------------------------------------
+// Wire o interceptor 401 para limpar a store quando o token expira.
+// ---------------------------------------------------------------------------
 registerSessionExpiredHandler(() => {
   void useAuthStore.getState().clearSession();
 });

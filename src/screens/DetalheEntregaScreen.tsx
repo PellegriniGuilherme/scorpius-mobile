@@ -1,37 +1,12 @@
-import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react-native';
-import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { loadDeliveryOccurrencesView, retryPendingOccurrence } from '@/services/occurrenceOutboxService';
-import {
-  resolveOccurrenceTypeName,
-  type OccurrenceTypeNameMap,
-} from '@/services/occurrenceTypeService';
-import type { DriverOccurrence } from '@/api/occurrences';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
-import { AlertBanner } from '@/components/AlertBanner';
-import { ActionChoiceCard } from '@/components/ActionChoiceCard';
 import { StatusBadge } from '@/components/StatusBadge';
-import NetInfo from '@react-native-community/netinfo';
-import { fetchDeliveryWithCache } from '@/services/deliveryService';
-import {
-  isTrackableDeliveryStatus,
-  locationTrackingService,
-} from '@/services/LocationTrackingService';
-import { refreshOccurrenceTypesCache } from '@/services/occurrenceTypeService';
-import { syncWorker } from '@/services/SyncWorker';
-import { formatDeliveryWindowLabel, deliveryWindowEmptyLabel } from '@/lib/formatDeliveryWindow';
-import {
-  formatAddressLocalityLine,
-  formatAddressStreetLine,
-} from '@/lib/formatAddress';
-import { formatBrazilPhone, extractBrazilPhoneDigits } from '@/lib/formatPhone';
-import { openRecipientPhone, openRecipientWhatsApp, recipientPhoneDigits } from '@/lib/contactRecipient';
-import { mapDelivery, nextFsmAction } from '@/lib/mapDelivery';
-import { runDeliveryAction } from '@/services/deliveryActions';
-import type { DeliveryViewModel } from '@/types/delivery';
-import type { DeliveryUiStatus } from '@/types/delivery';
+import { getDelivery, type DeliveryDetail } from '@/api/deliveries';
+import { findDelivery } from '@/mocks/deliveries';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
 import type { AppStackParamList } from '@/navigation/types';
@@ -39,430 +14,133 @@ import type { AppStackParamList } from '@/navigation/types';
 type Nav = NativeStackNavigationProp<AppStackParamList, 'DetalheEntrega'>;
 type Route_ = RouteProp<AppStackParamList, 'DetalheEntrega'>;
 
-interface PendingOccurrenceRow {
-  localId: string;
-  outboxId: number;
-  typeSlug: string;
-  typeName: string;
-  notes?: string;
-  status: 'pending' | 'failed';
-  lastError?: string | null;
-}
-
-function remoteOccurrenceLabel(occ: DriverOccurrence, typeNameMap: OccurrenceTypeNameMap): string {
-  return occ.type?.name ?? resolveOccurrenceTypeName(occ.type?.slug, typeNameMap);
-}
-
-function statusLabel(s: DeliveryUiStatus): string {
-  return {
-    pending: ptBR.detail.statusPending,
-    picked_up: ptBR.detail.statusPickedUp,
-    in_route: ptBR.detail.statusInRoute,
-    delivered: ptBR.detail.statusDelivered,
-    failed: ptBR.detail.statusFailed,
-  }[s];
-}
-
 export function DetalheEntregaScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route_>();
   const { colors, tokens } = useTheme();
-  const [delivery, setDelivery] = useState<DeliveryViewModel | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [acting, setActing] = useState(false);
-  const [pendingSync, setPendingSync] = useState(false);
-  const [occurrences, setOccurrences] = useState<DriverOccurrence[]>([]);
-  const [pendingOccurrences, setPendingOccurrences] = useState<PendingOccurrenceRow[]>([]);
-  const [occurrenceTypeNames, setOccurrenceTypeNames] = useState<OccurrenceTypeNameMap>({});
-  const [occurrencesLoading, setOccurrencesLoading] = useState(false);
-  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
+  const [delivery, setDelivery] = useState<DeliveryDetail | null>(null);
 
-  const loadOccurrences = useCallback(async (deliveryId: number) => {
-    setOccurrencesLoading(true);
-    try {
-      const { remote, pending, typeNameMap } = await loadDeliveryOccurrencesView(deliveryId);
-      setOccurrences(remote);
-      setPendingOccurrences(pending);
-      setOccurrenceTypeNames(typeNameMap);
-    } finally {
-      setOccurrencesLoading(false);
-    }
-  }, []);
-
-  const load = useCallback(async (options?: { silent?: boolean; refresh?: boolean }) => {
-    if (options?.refresh) {
-      setRefreshing(true);
-    } else if (!options?.silent) {
-      setLoading(true);
-    }
-    try {
-      if (options?.refresh) {
-        await syncWorker.drain();
-        void refreshOccurrenceTypesCache();
-      }
-      const res = await fetchDeliveryWithCache(route.params.deliveryId);
-      const mapped = res.data ? mapDelivery(res.data) : null;
-      setDelivery(mapped);
-      if (res.data) {
-        await loadOccurrences(route.params.deliveryId);
-        if (isTrackableDeliveryStatus(res.data.status)) {
-          setLocationPermissionDenied(!locationTrackingService.isTrackingDelivery(res.data.id));
-        } else {
-          setLocationPermissionDenied(false);
-        }
-      } else {
-        setLocationPermissionDenied(false);
-      }
-    } finally {
-      if (options?.refresh) {
-        setRefreshing(false);
-      } else if (!options?.silent) {
-        setLoading(false);
-      }
-    }
-  }, [route.params.deliveryId, loadOccurrences]);
-
-  const hasLoadedOnce = useRef(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      void load({ silent: hasLoadedOnce.current });
-      hasLoadedOnce.current = true;
-    }, [load]),
-  );
-
-  function handleRefresh() {
-    void load({ refresh: true, silent: true });
-  }
-
-  async function runAction(payload: Parameters<typeof runDeliveryAction>[0]) {
-    if (!delivery) return;
-    setActing(true);
-    setPendingSync(true);
-    try {
-      const net = await NetInfo.fetch();
-      await runDeliveryAction(payload);
-      setPendingSync(!net.isConnected);
-      await load({ silent: true });
-    } catch {
-      setPendingSync(true);
-    } finally {
-      setActing(false);
-    }
-  }
-
-  async function handleFsmAction() {
-    if (!delivery) return;
-    const action = nextFsmAction(delivery.status);
-    if (!action) return;
-    if (action === 'proof') {
-      navigation.navigate('Comprovante', { deliveryId: delivery.id });
-      return;
-    }
-    await runAction({
-      deliveryId: delivery.id,
-      action: action === 'start' ? 'start' : 'in_transit',
-    });
-  }
-
-  async function handleFail() {
-    if (!delivery) return;
-    navigation.navigate('MarcarFalha', { deliveryId: delivery.id });
-  }
-
-  if (loading && !delivery) {
-    return (
-      <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
-    );
-  }
+  useEffect(() => {
+    void getDelivery(route.params.deliveryId)
+      .then(setDelivery)
+      .catch(() => {
+        const mock = findDelivery(route.params.deliveryId);
+        if (!mock) return;
+        setDelivery({
+          id: mock.id,
+          reference_code: mock.code,
+          status: mock.status,
+          delivery_address: mock.address,
+          recipient: { name: mock.customer.name, phone: mock.customer.phone },
+          documents: mock.items.map((item, idx) => ({
+            id: mock.id * 10 + idx,
+            reference_number: item.sku,
+            delivery_status: 'pending',
+            type: { name: item.description, slug: 'item' },
+          })),
+          documents_summary: { total: mock.items.length, delivered: 0, failed: 0, pending: mock.items.length },
+        });
+      });
+  }, [route.params.deliveryId]);
 
   if (!delivery) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, padding: tokens.space[6] }}>
-        <Text style={{ color: colors.textMuted }}>Entrega não encontrada.</Text>
+        <Text style={{ color: colors.textMuted }}>Carregando...</Text>
       </View>
     );
   }
 
-  const windowLabel = formatDeliveryWindowLabel(delivery.windowStart, delivery.windowEnd);
-  const fsmAction = nextFsmAction(delivery.status);
-  const proofPhoto = delivery.proofRequirements.requires_photo;
-  const proofSignature = delivery.proofRequirements.requires_signature;
-  const proofSummary = proofPhoto && proofSignature
-    ? `${ptBR.detail.proofRequirementsPhoto} e ${ptBR.detail.proofRequirementsSignature.toLowerCase()}`
-    : proofPhoto
-      ? ptBR.detail.proofRequirementsPhoto
-      : proofSignature
-        ? ptBR.detail.proofRequirementsSignature
-        : ptBR.detail.proofRequirementsNone;
-  const customerPhoneDigits = recipientPhoneDigits(delivery.customer.phone);
-  const customerPhoneLabel = customerPhoneDigits
-    ? formatBrazilPhone(extractBrazilPhoneDigits(delivery.customer.phone))
-    : delivery.customer.phone;
-  const addressPrimary = formatAddressStreetLine(delivery.address);
-  const addressLocality = formatAddressLocalityLine(delivery.address);
-  const addressZip = delivery.address.zip?.trim() ?? '';
-  const hasAddress = Boolean(addressPrimary || addressLocality || addressZip);
+  const addr = delivery.delivery_address as {
+    street?: string;
+    number?: string;
+    neighborhood?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+  };
 
   return (
-    <ScrollView
-      testID="detail-scroll"
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: tokens.space[6], gap: tokens.space[5] }}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-          tintColor={colors.accent}
-          colors={[colors.accent]}
-        />
-      }
-    >
-      <View style={{ gap: tokens.space[2] }}>
-        <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, fontWeight: tokens.weight.medium, textTransform: 'uppercase' }}>
-          {ptBR.app.name}
-        </Text>
-        <Text style={{ fontSize: tokens.text['2xl'], fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
-          {ptBR.detail.title.replace('{code}', delivery.code)}
-        </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: tokens.space[2], flexWrap: 'wrap' }}>
-          <StatusBadge status={delivery.uiStatus} label={statusLabel(delivery.uiStatus)} />
-          {pendingSync && (
-            <Text style={{ color: colors.statusWarningText, fontSize: tokens.text.xs }}>
-              {ptBR.detail.pendingSync}
-            </Text>
-          )}
-        </View>
-      </View>
-
-      {locationPermissionDenied ? (
-        <AlertBanner
-          tone="warning"
-          message={ptBR.detail.locationPermissionDenied}
-          testID="detail-location-permission-banner"
-        />
-      ) : null}
-
-      <Card>
-        <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, textTransform: 'uppercase' }}>
-          {ptBR.detail.customerSection}
-        </Text>
-        <Text style={{ fontSize: tokens.text.lg, fontWeight: tokens.weight.semibold, color: colors.textPrimary, marginTop: tokens.space[1] }}>
-          {delivery.customer.name}
-        </Text>
-        {delivery.customer.phone ? (
-          <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm, marginTop: tokens.space[1] }}>
-            {customerPhoneLabel}
+    <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
+      <ScrollView contentContainerStyle={{ padding: tokens.space[6], gap: tokens.space[5] }}>
+        <View style={{ gap: tokens.space[2] }}>
+          <Text style={{ fontSize: tokens.text['3xl'], fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
+            {ptBR.detail.title.replace('{code}', delivery.reference_code)}
           </Text>
-        ) : null}
-        {customerPhoneDigits ? (
-          <View style={{ flexDirection: 'row', gap: tokens.space[2], marginTop: tokens.space[3] }}>
-            <Button
-              testID="detail-call-phone"
-              label={ptBR.detail.callPhone}
-              variant="secondary"
-              onPress={() => void openRecipientPhone(delivery.customer.phone)}
-              style={{ flex: 1 }}
-            />
-            <Button
-              testID="detail-call-whatsapp"
-              label={ptBR.detail.callWhatsApp}
-              variant="secondary"
-              onPress={() => void openRecipientWhatsApp(delivery.customer.phone)}
-              style={{ flex: 1 }}
-            />
-          </View>
-        ) : null}
-      </Card>
-
-      <Card>
-        <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, textTransform: 'uppercase' }}>
-          {ptBR.detail.addressSection}
-        </Text>
-        <View style={{ marginTop: tokens.space[1], gap: tokens.space[1] }}>
-          {!hasAddress ? (
-            <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm }}>
-              {ptBR.home.addressUnavailable}
-            </Text>
-          ) : (
-            <>
-              {addressPrimary ? (
-                <Text style={{ fontSize: tokens.text.base, color: colors.textPrimary }}>{addressPrimary}</Text>
-              ) : null}
-              {addressLocality ? (
-                <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>{addressLocality}</Text>
-              ) : null}
-              {addressZip ? (
-                <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>CEP {addressZip}</Text>
-              ) : null}
-            </>
-          )}
+          <Text style={{ color: colors.textMuted }}>
+            {delivery.documents_summary.delivered}/{delivery.documents_summary.total} documentos entregues
+          </Text>
         </View>
-      </Card>
 
-      <Card>
-        <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, textTransform: 'uppercase' }}>
-          Pacotes
-        </Text>
-        <Text style={{ color: colors.textPrimary, marginTop: tokens.space[1] }}>
-          {delivery.packageCount} pacote(s)
-          {delivery.weightKg != null ? ` • ${delivery.weightKg} kg` : ''}
-        </Text>
-      </Card>
-
-      <Card>
-        <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, textTransform: 'uppercase' }}>
-          {ptBR.detail.windowSection}
-        </Text>
-        <Text style={{ fontSize: tokens.text.lg, fontWeight: tokens.weight.semibold, color: colors.accent, marginTop: tokens.space[1] }}>
-          {windowLabel ?? deliveryWindowEmptyLabel()}
-        </Text>
-      </Card>
-
-      {delivery.failureReason ? (
         <Card>
-          <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, textTransform: 'uppercase' }}>
-            {ptBR.detail.failureSection}
+          <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, fontWeight: tokens.weight.medium, textTransform: 'uppercase' }}>
+            {ptBR.detail.customerSection}
           </Text>
-          <Text style={{ color: colors.textPrimary, fontSize: tokens.text.base, marginTop: tokens.space[1] }}>
-            {delivery.failureReason}
+          <Text style={{ fontSize: tokens.text.lg, fontWeight: tokens.weight.semibold, color: colors.textPrimary, marginTop: tokens.space[1] }}>
+            {delivery.recipient?.name ?? '—'}
           </Text>
+          <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>{delivery.recipient?.phone}</Text>
         </Card>
-      ) : null}
 
-      <Card>
-        <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, textTransform: 'uppercase' }}>
-          {ptBR.detail.occurrencesSection}
-        </Text>
-        {occurrencesLoading ? (
-          <ActivityIndicator color={colors.accent} style={{ marginTop: tokens.space[3] }} />
-        ) : occurrences.length === 0 && pendingOccurrences.length === 0 ? (
-          <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm, marginTop: tokens.space[2] }}>
-            {ptBR.detail.occurrencesEmpty}
+        <Card>
+          <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, fontWeight: tokens.weight.medium, textTransform: 'uppercase' }}>
+            {ptBR.detail.addressSection}
           </Text>
-        ) : (
+          <Text style={{ fontSize: tokens.text.base, color: colors.textPrimary, marginTop: tokens.space[1] }}>
+            {addr.street}{addr.number ? `, ${addr.number}` : ''}
+          </Text>
+          <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>{addr.neighborhood}</Text>
+        </Card>
+
+        <Card>
+          <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, fontWeight: tokens.weight.medium, textTransform: 'uppercase' }}>
+            Documentos ({delivery.documents.length})
+          </Text>
           <View style={{ marginTop: tokens.space[2], gap: tokens.space[2] }}>
-            {occurrences.map((occ) => (
-              <View key={`sync-${occ.id}`} style={{ gap: tokens.space[1] }}>
-                <Text style={{ color: colors.textPrimary, fontWeight: tokens.weight.semibold, fontSize: tokens.text.sm }}>
-                  {remoteOccurrenceLabel(occ, occurrenceTypeNames)}
-                </Text>
-                {occ.description ? (
-                  <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>{occ.description}</Text>
-                ) : null}
-                <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs }}>
-                  {occ.occurred_at
-                    ? new Date(occ.occurred_at).toLocaleString('pt-BR')
-                    : new Date(occ.created_at).toLocaleString('pt-BR')}
-                </Text>
-              </View>
-            ))}
-            {pendingOccurrences.map((occ) => (
-              <View key={`pending-${occ.localId}`} style={{ gap: tokens.space[1] }}>
-                <Text style={{ color: colors.textPrimary, fontWeight: tokens.weight.semibold, fontSize: tokens.text.sm }}>
-                  {occ.typeName}
-                </Text>
-                {occ.notes ? (
-                  <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>{occ.notes}</Text>
-                ) : null}
-                <Text
+            {delivery.documents.map((doc) => (
+              <Pressable
+                key={doc.id}
+                onPress={() =>
+                  doc.delivery_status === 'pending' &&
+                  navigation.navigate('Comprovante', { deliveryId: delivery.id, documentId: doc.id })
+                }
+              >
+                <View
                   style={{
-                    color: occ.status === 'failed' ? colors.statusDangerText : colors.statusWarningText,
-                    fontSize: tokens.text.xs,
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingVertical: tokens.space[2],
+                    borderBottomColor: colors.borderDefault,
+                    borderBottomWidth: 1,
                   }}
                 >
-                  {occ.status === 'failed'
-                    ? ptBR.detail.occurrenceFailed
-                    : ptBR.detail.occurrencePending}
-                </Text>
-                {occ.lastError ? (
-                  <Text
-                    style={{ color: colors.textMuted, fontSize: tokens.text.xs }}
-                    numberOfLines={2}
-                  >
-                    {occ.lastError}
-                  </Text>
-                ) : null}
-                <Button
-                  testID={`occurrence-retry-${occ.outboxId}`}
-                  label={ptBR.detail.occurrenceRetry}
-                  variant="ghost"
-                  onPress={() => {
-                    void (async () => {
-                      await retryPendingOccurrence(occ.outboxId);
-                      await loadOccurrences(delivery.id);
-                    })();
-                  }}
-                  fullWidth
-                />
-              </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.textPrimary, fontSize: tokens.text.sm, fontWeight: tokens.weight.medium }}>
+                      {doc.reference_number ?? doc.type?.name ?? `#${doc.id}`}
+                    </Text>
+                    <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs }}>{doc.type?.name}</Text>
+                  </View>
+                  <StatusBadge
+                    status={doc.delivery_status === 'delivered' ? 'delivered' : doc.delivery_status === 'failed' ? 'failed' : 'pending'}
+                    label={doc.delivery_status}
+                  />
+                </View>
+              </Pressable>
             ))}
           </View>
-        )}
-      </Card>
+        </Card>
 
-      <View style={{ gap: tokens.space[3] }}>
-        {fsmAction === 'proof' && (
-          <AlertBanner
-            tone="warning"
-            title={ptBR.detail.proofRequirementsTitle}
-            message={`${proofSummary}. ${ptBR.detail.finalizeHint}`}
-            testID="detail-finalize-warning"
-          />
-        )}
-        <Button label={ptBR.detail.openMap} onPress={() => navigation.navigate('MapaRota', { deliveryId: delivery.id })} fullWidth />
-        {fsmAction && fsmAction !== 'proof' && (
+        <View style={{ gap: tokens.space[3] }}>
+          <Button label={ptBR.detail.openMap} onPress={() => navigation.navigate('MapaRota', { deliveryId: delivery.id })} fullWidth />
           <Button
-            label={fsmAction === 'start' ? ptBR.detail.pickUp : ptBR.detail.startRoute}
-            onPress={() => void handleFsmAction()}
-            loading={acting}
+            label="Reportar ocorrência"
+            variant="secondary"
+            onPress={() => navigation.navigate('Ocorrencia', { deliveryId: delivery.id })}
             fullWidth
           />
-        )}
-        {fsmAction === 'proof' && (
-          <Button
-            label={ptBR.detail.collectProof}
-            variant="primary"
-            onPress={() => navigation.navigate('Comprovante', { deliveryId: delivery.id })}
-            fullWidth
-          />
-        )}
-        {(delivery.status === 'picked_up' || delivery.status === 'in_transit') && (
-          <View style={{ gap: tokens.space[3], marginTop: tokens.space[2] }}>
-            <View style={{ gap: tokens.space[1] }}>
-              <Text
-                style={{
-                  fontSize: tokens.text.sm,
-                  fontWeight: tokens.weight.semibold,
-                  color: colors.textPrimary,
-                }}
-              >
-                {ptBR.detail.problems.sectionTitle}
-              </Text>
-              <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted }}>
-                {ptBR.detail.problems.sectionHint}
-              </Text>
-            </View>
-            <ActionChoiceCard
-              testID="detail-occurrence-choice"
-              title={ptBR.detail.problems.occurrenceTitle}
-              subtitle={ptBR.detail.problems.occurrenceSubtitle}
-              tone="info"
-              onPress={() => navigation.navigate('ReportarOcorrencia', { deliveryId: delivery.id })}
-            />
-            <ActionChoiceCard
-              testID="detail-fail-choice"
-              title={ptBR.detail.problems.failTitle}
-              subtitle={ptBR.detail.problems.failSubtitle}
-              tone="danger"
-              onPress={handleFail}
-            />
-          </View>
-        )}
-      </View>
+        </View>
+      </ScrollView>
     </ScrollView>
   );
 }

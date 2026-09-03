@@ -7,8 +7,8 @@
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "ignoreDeprecations": "6.0",
-    "types": ["jest", "node"],
+    "ignoreDeprecations": "5.0",
+    "types": ["jest"],
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]

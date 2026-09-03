@@ -1,299 +1,171 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  Text,
-  View,
-} from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { listStops, type DriverStop } from '@/api/deliveries';
+import { useAuthStore } from '@/store/auth';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
-import { DeliveryListCard } from '@/components/DeliveryListCard';
-import { DeliveryStatusFilter } from '@/components/DeliveryStatusFilter';
-import {
-  fetchDeliveriesPage,
-  mergeDeliveryPages,
-  readDeliveriesFromCache,
-} from '@/services/deliveryService';
-import { subscribeDeliveryCache } from '@/services/deliveryCacheEvents';
-import { refreshOccurrenceTypesCache } from '@/services/occurrenceTypeService';
-import { createDefaultActiveUiStatusSet, mapDelivery, matchesUiFilters } from '@/lib/mapDelivery';
-import { useAuthStore } from '@/store/auth';
-import type { DeliveryApi, DeliveryUiStatus, DeliveryViewModel } from '@/types/delivery';
+import { StatusBadge } from '@/components/StatusBadge';
+import { MOCK_DELIVERIES } from '@/mocks/deliveries';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
 import type { AppStackParamList } from '@/navigation/types';
-import NetInfo from '@react-native-community/netinfo';
 
 type Nav = NativeStackNavigationProp<AppStackParamList, 'HomeMotorista'>;
-
-const PROFILE_BAR_HEIGHT = 56;
+type FilterStatus = 'all' | 'pending' | 'delivered' | 'failed';
 
 export function HomeMotoristaScreen() {
   const navigation = useNavigation<Nav>();
-  const driver = useAuthStore((s) => s.driver);
-  const insets = useSafeAreaInsets();
   const { colors, tokens } = useTheme();
-  const profileBarOffset = insets.bottom + tokens.space[3] + PROFILE_BAR_HEIGHT + tokens.space[4];
-  const [statusFilters, setStatusFilters] = useState<Set<DeliveryUiStatus>>(() => createDefaultActiveUiStatusSet());
-  const [rawItems, setRawItems] = useState<DeliveryApi[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [fromCache, setFromCache] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
+  const driver = useAuthStore((s) => s.driver);
+  const [filter, setFilter] = useState<FilterStatus>('all');
+  const [stops, setStops] = useState<DriverStop[]>([]);
+  const [useMock, setUseMock] = useState(false);
 
-  const hasLoadedOnce = useRef(false);
-  const loadingMoreRef = useRef(false);
-
-  const items = useMemo(() => rawItems.map(mapDelivery), [rawItems]);
-
-  const applyCachedItems = useCallback(async () => {
-    const cached = await readDeliveriesFromCache();
-    if (cached.length > 0) {
-      setRawItems(cached);
-      setPage(1);
-      setHasMore(false);
-    }
-  }, []);
-
-  const loadPage = useCallback(async (targetPage: number, options?: { refresh?: boolean; append?: boolean }) => {
-    if (options?.refresh) {
-      setRefreshing(true);
-    } else if (options?.append) {
-      setLoadingMore(true);
-      loadingMoreRef.current = true;
-    } else {
-      setLoading(true);
-    }
-    setError(null);
-
+  const loadStops = useCallback(async () => {
     try {
-      const res = await fetchDeliveriesPage(targetPage, {
-        forceNetwork: options?.refresh ? true : undefined,
-      });
-      setRawItems((current) =>
-        options?.append ? mergeDeliveryPages(current, res.data) : res.data,
+      const res = await listStops(
+        filter === 'all' ? {} : { delivery_status: filter },
       );
-      setPage(res.meta.current_page);
-      setHasMore(res.meta.current_page < res.meta.last_page);
-      setFromCache(res.fromCache);
-      void refreshOccurrenceTypesCache();
+      setStops(res.data);
+      setUseMock(false);
     } catch {
-      setError(ptBR.home.loadError);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
-      loadingMoreRef.current = false;
+      setUseMock(true);
     }
-  }, []);
-
-  const load = useCallback(
-    async (options?: { refresh?: boolean; silent?: boolean }) => {
-      if (options?.silent) {
-        await loadPage(1);
-        return;
-      }
-      await loadPage(1, { refresh: options?.refresh });
-    },
-    [loadPage],
-  );
-
-  const loadMore = useCallback(async () => {
-    if (loadingMoreRef.current || loading || refreshing || !hasMore) {
-      return;
-    }
-    await loadPage(page + 1, { append: true });
-  }, [hasMore, loadPage, loading, page, refreshing]);
+  }, [filter]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadStops();
+  }, [loadStops]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!hasLoadedOnce.current) {
-        hasLoadedOnce.current = true;
-        return;
-      }
-      void (async () => {
-        await applyCachedItems();
-        const net = await NetInfo.fetch();
-        if (net.isConnected) {
-          void load({ silent: true });
-        }
-      })();
-    }, [applyCachedItems, load]),
-  );
+  const visible = useMemo(() => {
+    if (!useMock) return stops;
+    return MOCK_DELIVERIES.filter((d) => d.driver_id === driver?.id).flatMap((d) =>
+      d.items.map((item, idx) => ({
+        document: {
+          id: d.id * 10 + idx,
+          delivery_status: d.status === 'delivered' ? 'delivered' as const : d.status === 'failed' ? 'failed' as const : 'pending' as const,
+          reference_number: item.sku,
+          type: { slug: 'package', name: item.description },
+        },
+        delivery: {
+          id: d.id,
+          reference_code: d.code,
+          status: d.status === 'in_route' ? 'in_transit' : d.status,
+          delivery_address: d.address,
+          recipient: { name: d.customer.name, phone: d.customer.phone },
+        },
+      })),
+    );
+  }, [stops, useMock, driver?.id]);
 
-  useEffect(() => {
-    return subscribeDeliveryCache(() => {
-      void applyCachedItems();
-    });
-  }, [applyCachedItems]);
+  function statusLabel(s: string): string {
+    if (s === 'delivered') return ptBR.detail.statusDelivered;
+    if (s === 'failed') return ptBR.detail.statusFailed;
+    if (s === 'pending') return ptBR.detail.statusPending;
+    return s;
+  }
 
-  const visible = useMemo(
-    () => items.filter((d) => matchesUiFilters(d, statusFilters)),
-    [items, statusFilters],
-  );
+  function renderItem({ item }: { item: DriverStop }) {
+    const delivery = item.delivery;
+    const addr = delivery?.delivery_address;
+    const docStatus = item.document.delivery_status;
 
-  const counts = useMemo(() => {
-    const pending = items.filter((d) => d.uiStatus === 'pending').length;
-    const inRoute = items.filter((d) => d.uiStatus === 'in_route').length;
-    return { total: items.length, pending, inRoute };
-  }, [items]);
-
-  function renderItem({ item }: { item: DeliveryViewModel }) {
     return (
       <Pressable
-        onPress={() => navigation.navigate('DetalheEntrega', { deliveryId: item.id })}
-        style={({ pressed }) => ({
-          opacity: pressed ? 0.85 : 1,
-          marginHorizontal: tokens.space[6],
-          marginBottom: tokens.space[3],
-        })}
+        onPress={() =>
+          navigation.navigate('DetalheEntrega', {
+            deliveryId: delivery?.id ?? 0,
+            documentId: item.document.id,
+          })
+        }
+        style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, marginBottom: tokens.space[3] })}
       >
-        <DeliveryListCard delivery={item} />
+        <Card>
+          <View style={{ gap: tokens.space[2] }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: tokens.text.base, fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
+                {item.document.reference_number ?? item.document.type?.name ?? `#${item.document.id}`}
+              </Text>
+              <StatusBadge status={docStatus === 'delivered' ? 'delivered' : docStatus === 'failed' ? 'failed' : 'pending'} label={statusLabel(docStatus)} />
+            </View>
+            <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>
+              {delivery?.reference_code} · {item.document.type?.name}
+            </Text>
+            {addr && (
+              <Text style={{ color: colors.textMuted, fontSize: tokens.text.xs }}>
+                {addr.street}{addr.number ? `, ${addr.number}` : ''} — {addr.neighborhood}
+              </Text>
+            )}
+          </View>
+        </Card>
       </Pressable>
     );
   }
 
-  if (loading && rawItems.length === 0) {
-    return (
-      <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator color={colors.accent} size="large" />
-      </View>
-    );
-  }
-
-  const firstName = driver?.name?.split(' ')[0] ?? 'motorista';
-
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <View
-        style={{
-          paddingHorizontal: tokens.space[6],
-          paddingTop: insets.top + tokens.space[3],
-          paddingBottom: tokens.space[3],
-          gap: tokens.space[3],
-          borderBottomWidth: 1,
-          borderBottomColor: colors.borderDefault,
-          backgroundColor: colors.background,
-        }}
-      >
-        <View style={{ gap: tokens.space[1] }}>
-          <Text style={{ fontSize: tokens.text.xs, color: colors.textMuted, fontWeight: tokens.weight.medium, textTransform: 'uppercase' }}>
-            {ptBR.app.name}
-          </Text>
+      <ScrollView contentContainerStyle={{ padding: tokens.space[6], gap: tokens.space[5] }}>
+        <View style={{ gap: tokens.space[2] }}>
           <Text style={{ fontSize: tokens.text['2xl'], fontWeight: tokens.weight.bold, color: colors.textPrimary }}>
-            {ptBR.home.greeting.replace('{name}', firstName)}
+            {ptBR.home.title}
           </Text>
-          <Text style={{ color: colors.textSecondary, fontSize: tokens.text.sm }}>
-            {ptBR.home.deliveryCount.replace('{count}', String(counts.total))}
-            {counts.inRoute > 0 ? ` · ${counts.inRoute} em rota` : ''}
+          <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm }}>
+            {useMock ? 'Modo demo (API indisponível)' : ptBR.home.subtitle}
           </Text>
-          {fromCache && (
-            <View
-              style={{
-                alignSelf: 'flex-start',
-                marginTop: tokens.space[1],
-                paddingHorizontal: tokens.space[2],
-                paddingVertical: tokens.space[1],
-                borderRadius: tokens.radius.full,
-                backgroundColor: colors.statusWarningSurface,
-                borderWidth: 1,
-                borderColor: colors.statusWarningBorder,
-              }}
-            >
-              <Text style={{ color: colors.statusWarningText, fontSize: tokens.text.xs }}>
-                {ptBR.home.offlineBanner}
-              </Text>
-            </View>
-          )}
         </View>
 
-        <DeliveryStatusFilter
-          value={statusFilters}
-          onChange={setStatusFilters}
-          deliveries={items}
-        />
-      </View>
-
-      <FlatList
-        testID="home-delivery-list"
-        style={{ flex: 1 }}
-        data={visible}
-        keyExtractor={(d) => String(d.id)}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingTop: tokens.space[3], paddingBottom: profileBarOffset, flexGrow: 1 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void load({ refresh: true })}
-            tintColor={colors.accent}
-            colors={[colors.accent]}
-          />
-        }
-        onEndReached={() => void loadMore()}
-        onEndReachedThreshold={0.35}
-        ListEmptyComponent={
-          !loading && !error ? (
-            <Card style={{ marginHorizontal: tokens.space[6] }}>
-              <Text style={{ color: colors.textPrimary, fontWeight: tokens.weight.semibold, textAlign: 'center' }}>
-                {rawItems.length === 0 ? ptBR.home.emptyTitle : ptBR.home.emptyFilter}
-              </Text>
-              {rawItems.length === 0 ? (
-                <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm, textAlign: 'center', marginTop: tokens.space[2] }}>
-                  {ptBR.home.emptyDesc}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={{ flexDirection: 'row', gap: tokens.space[2] }}>
+            {([
+              ['all', ptBR.home.filter.all],
+              ['pending', ptBR.home.filter.pending],
+              ['delivered', ptBR.home.filter.delivered],
+            ] as Array<[FilterStatus, string]>).map(([key, label]) => (
+              <Pressable
+                key={key}
+                onPress={() => setFilter(key)}
+                style={{
+                  paddingHorizontal: tokens.space[4],
+                  paddingVertical: tokens.space[2],
+                  borderRadius: tokens.radius.full,
+                  backgroundColor: filter === key ? colors.accent : colors.surfacePanel,
+                  borderColor: filter === key ? colors.accentBorder : colors.borderDefault,
+                  borderWidth: 1,
+                }}
+              >
+                <Text
+                  style={{
+                    color: filter === key ? colors.textOnAccent : colors.textSecondary,
+                    fontSize: tokens.text.sm,
+                    fontWeight: tokens.weight.medium,
+                  }}
+                >
+                  {label}
                 </Text>
-              ) : null}
-            </Card>
-          ) : null
-        }
-        ListFooterComponent={
-          <View style={{ paddingHorizontal: tokens.space[6], paddingTop: tokens.space[2], gap: tokens.space[4] }}>
-            {loadingMore ? (
-              <ActivityIndicator color={colors.accent} style={{ paddingVertical: tokens.space[3] }} />
-            ) : null}
-            {error ? (
-              <Card>
-                <Text style={{ color: colors.statusDangerText, marginBottom: tokens.space[2] }}>{error}</Text>
-                <Button label={ptBR.common.retry} variant="secondary" onPress={() => void load()} fullWidth />
-              </Card>
-            ) : null}
+              </Pressable>
+            ))}
           </View>
-        }
-      />
+        </ScrollView>
 
-      <View
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          paddingBottom: insets.bottom + tokens.space[4],
-          paddingHorizontal: tokens.space[6],
-          paddingTop: tokens.space[3],
-          backgroundColor: colors.background,
-          borderTopWidth: 1,
-          borderTopColor: colors.borderDefault,
-        }}
-      >
-        <Button
-          testID="home-profile-button"
-          label={ptBR.profile.title}
-          variant="secondary"
-          fullWidth
-          onPress={() => navigation.navigate('PerfilMotorista')}
-        />
-      </View>
+        {visible.length === 0 ? (
+          <Card>
+            <View style={{ alignItems: 'center', gap: tokens.space[2], padding: tokens.space[6] }}>
+              <Text style={{ fontSize: tokens.text.lg, fontWeight: tokens.weight.semibold, color: colors.textPrimary }}>
+                {ptBR.home.emptyTitle}
+              </Text>
+              <Text style={{ color: colors.textMuted, fontSize: tokens.text.sm, textAlign: 'center' }}>
+                {ptBR.home.emptyDesc}
+              </Text>
+            </View>
+          </Card>
+        ) : (
+          <FlatList data={visible} keyExtractor={(s) => String(s.document.id)} renderItem={renderItem} scrollEnabled={false} />
+        )}
+
+        <Button label="Meu perfil" variant="secondary" fullWidth onPress={() => navigation.navigate('PerfilMotorista')} />
+      </ScrollView>
     </View>
   );
 }

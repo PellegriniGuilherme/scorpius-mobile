@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Scorpius Move",
+    "slug": "scorpius-move",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "scorpiusmove",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0f172a",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "local.scorpius.move"
+    },
+    "android": {
+      "package": "local.scorpius.move",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f172a"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
