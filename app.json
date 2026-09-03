@@ -23,6 +23,12 @@
     },
     "web": {
       "bundler": "metro"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "4c02a514-a933-4599-9625-5152b1b05ab5"
+      }
+    },
+    "owner": "guipellegrini"
   }
 }
