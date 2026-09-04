@@ -8,7 +8,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "ignoreDeprecations": "5.0",
-    "types": ["jest"],
+    "types": ["jest", "node"],
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
