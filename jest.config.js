@@ -6,7 +6,7 @@
  */
 module.exports = {
   preset: 'jest-expo',
-  setupFilesAfterEach: ['<rootDir>/jest.setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },

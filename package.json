@@ -10,7 +10,7 @@
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
-    "test": "echo 'move-app usa jest (a configurar em T068.2)' && exit 0",
+    "test": "jest --runInBand --watchman=false",
     "dev:mobile": "expo start --tunnel",
     "eas:build:dev": "eas build --profile development --platform android --local"
   },
@@ -46,6 +46,7 @@
     "babel-plugin-module-resolver": "^5.0.0",
     "eslint": "^9.39.4",
     "globals": "^15.15.0",
+    "jest": "^29.7.0",
     "jest-expo": "~52.0.6",
     "typescript": "^5.6.3"
   },
