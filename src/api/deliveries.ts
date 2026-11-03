@@ -60,3 +60,24 @@ export async function getDelivery(id: number): Promise<DeliveryDetail> {
   const { data } = await apiClient.get<{ data: DeliveryDetail }>(`/driver/deliveries/${id}`);
   return data.data;
 }
+
+export async function startDriverDelivery(id: number): Promise<DeliveryDetail> {
+  const { data } = await apiClient.post<{ data: DeliveryDetail }>(`/driver/deliveries/${id}/start`);
+  return data.data;
+}
+
+export async function inTransitDriverDelivery(id: number): Promise<DeliveryDetail> {
+  const { data } = await apiClient.post<{ data: DeliveryDetail }>(`/driver/deliveries/${id}/in-transit`);
+  return data.data;
+}
+
+export async function completeDriverDelivery(
+  id: number,
+  payload?: { photo_url?: string; signature_url?: string; notes?: string },
+): Promise<DeliveryDetail> {
+  const { data } = await apiClient.post<{ data: DeliveryDetail }>(
+    `/driver/deliveries/${id}/complete`,
+    payload ?? {},
+  );
+  return data.data;
+}

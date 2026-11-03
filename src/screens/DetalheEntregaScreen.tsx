@@ -5,7 +5,12 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { StatusBadge } from '@/components/StatusBadge';
-import { getDelivery, type DeliveryDetail } from '@/api/deliveries';
+import {
+  getDelivery,
+  inTransitDriverDelivery,
+  startDriverDelivery,
+  type DeliveryDetail,
+} from '@/api/deliveries';
 import { findDelivery } from '@/mocks/deliveries';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
@@ -19,6 +24,25 @@ export function DetalheEntregaScreen() {
   const route = useRoute<Route_>();
   const { colors, tokens } = useTheme();
   const [delivery, setDelivery] = useState<DeliveryDetail | null>(null);
+  const [advancing, setAdvancing] = useState(false);
+
+  async function handleAdvanceStatus() {
+    if (!delivery || advancing) return;
+    setAdvancing(true);
+    try {
+      if (delivery.status === 'assigned') {
+        await startDriverDelivery(delivery.id);
+      } else if (delivery.status === 'picked_up') {
+        await inTransitDriverDelivery(delivery.id);
+      }
+      const updated = await getDelivery(delivery.id);
+      setDelivery(updated);
+    } catch {
+      // keep current state on network failure
+    } finally {
+      setAdvancing(false);
+    }
+  }
 
   useEffect(() => {
     void getDelivery(route.params.deliveryId)
@@ -132,6 +156,18 @@ export function DetalheEntregaScreen() {
         </Card>
 
         <View style={{ gap: tokens.space[3] }}>
+          {(delivery.status === 'assigned' || delivery.status === 'picked_up') && (
+            <Button
+              label={
+                delivery.status === 'assigned'
+                  ? 'Confirmar coleta'
+                  : 'Iniciar trânsito'
+              }
+              onPress={() => void handleAdvanceStatus()}
+              loading={advancing}
+              fullWidth
+            />
+          )}
           <Button label={ptBR.detail.openMap} onPress={() => navigation.navigate('MapaRota', { deliveryId: delivery.id })} fullWidth />
           <Button
             label="Reportar ocorrência"

@@ -3,6 +3,7 @@ import { Alert, ScrollView, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { logoutDriver } from '@/api/auth';
 import { useAuthStore } from '@/store/auth';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
@@ -25,15 +26,20 @@ export function PerfilMotoristaScreen() {
 
   const appVersion = (Constants.expoConfig?.version as string | undefined) ?? '0.1.0';
 
+  async function performLogout() {
+    await logoutDriver();
+    await clearSession();
+  }
+
   function handleLogoutPress() {
     if (confirming) {
-      void clearSession();
+      void performLogout();
       return;
     }
     setConfirming(true);
     Alert.alert(ptBR.profile.logoutConfirmTitle, ptBR.profile.logoutConfirmDesc, [
       { text: ptBR.profile.cancel, style: 'cancel', onPress: () => setConfirming(false) },
-      { text: ptBR.profile.confirm, style: 'destructive', onPress: () => void clearSession() },
+      { text: ptBR.profile.confirm, style: 'destructive', onPress: () => void performLogout() },
     ]);
   }
 

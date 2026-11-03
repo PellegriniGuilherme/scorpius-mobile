@@ -10,7 +10,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-na
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
-import { confirmOtp } from '@/api/auth';
+import { confirmOtp, requestOtp } from '@/api/auth';
 import { useAuthStore } from '@/store/auth';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ptBR } from '@/i18n/pt-BR';
@@ -107,8 +107,10 @@ export function OtpScreen() {
           <Button
             label={resendIn > 0 ? ptBR.otp.resendIn.replace('{seconds}', String(resendIn)) : ptBR.otp.resend}
             onPress={() => {
-              // TODO F2 Mobile: re-chamar requestOtp
               setResendIn(RESEND_COOLDOWN_SEC);
+              void requestOtp(phone, 'move-app').catch(() => {
+                // ignore resend error on UI cooldown
+              });
             }}
             variant="ghost"
             disabled={resendIn > 0}

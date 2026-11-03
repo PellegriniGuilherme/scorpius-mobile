@@ -75,3 +75,11 @@ export async function clearPersistedDriver(): Promise<void> {
     // ignore
   }
 }
+
+export async function logoutDriver(): Promise<void> {
+  try {
+    await apiClient.post('/driver/auth/logout');
+  } catch {
+    // best-effort server revocation
+  }
+}
